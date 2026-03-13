@@ -1,6 +1,7 @@
 /*
  * RECEPTOR ESP32 / ESP32-S3
  * Puente ESP-NOW -> Serial
+ * Muestra su MAC para configurar emisores
  */
 
 #include <WiFi.h>
@@ -23,11 +24,16 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
 
-  Serial.println("ESP-NOW Receiver Ready");
+  Serial.println();
+  Serial.println("ESP-NOW Listo");
+
+  // Mostrar MAC del receptor
+  Serial.print("MAC: ");
+  Serial.println(WiFi.macAddress());
 
   // Inicializar ESP-NOW
   if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
+    Serial.println("Error inicializando el ESP-NOW");
     return;
   }
 
