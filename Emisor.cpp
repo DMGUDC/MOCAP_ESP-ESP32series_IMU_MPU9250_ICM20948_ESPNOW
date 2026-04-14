@@ -14,7 +14,7 @@
 // Hardware requerido:
 //   - Módulo ESP-01S  (ESP8266EX, 1MB flash, 80KB RAM)
 //   - Sensor MPU9250  (IMU 9-DOF: accel + gyro + magnetómetro AK8963)
-// 
+//
 // Drivers para la placa:
 //   - http://arduino.esp8266.com/stable/package_esp8266com_index.json
 //
