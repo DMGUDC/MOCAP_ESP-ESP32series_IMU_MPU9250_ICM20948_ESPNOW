@@ -36,8 +36,10 @@ Este proyecto implementa una jerarquía **muchos-a-uno**:
 [ESP8266EX + IMU] ──┘        (2.4 GHz)         (vía USB Serial 1 Mbps)         
       ...
 ```
-
 <cite index="3-1">En la comunicación muchos-a-uno existe un nodo central o gateway que recolecta todos los datos de los dispositivos ESP conectados.</cite>
+
+> **Notas:** 
+- El sitema de trasmision funciona a iuna frecuencia de 1000000 de baudios de tal manera que pueda recibir 60 datos / segundo de cada sensor hasta un maximo de 14 con una latencia por debajo del los 2ms.
 
 ### Roles
 
