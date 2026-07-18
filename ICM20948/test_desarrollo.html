@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP-NOW MoCap Studio</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+/* ── RESET & BASE ─────────────────────────────── */
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0b0b0f;color:#ccc;
+     height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:13px}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#252535;border-radius:2px}
+
+/* ── HEADER ──────────────────────────────────── */
+#topbar{display:flex;align-items:center;gap:10px;padding:8px 16px;
+        background:#111116;border-bottom:1px solid #1e1e2a;flex-shrink:0;z-index:10}
+#topbar h1{font-size:13px;font-weight:600;color:#fff;white-space:nowrap;letter-spacing:.02em}
+.badge{font-size:10px;padding:2px 8px;border-radius:4px;font-weight:500;white-space:nowrap}
+.badge.off{background:#1a1a24;color:#555}
+.badge.on {background:#0a2a18;color:#33cc77}
+.badge.rx {background:#091f12;color:#66dd99;animation:blink 1.2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.45}}
+.sp{flex:1}
+.btn{padding:5px 12px;border-radius:5px;border:1px solid #2a2a3a;background:#16162a;
+     color:#8888dd;font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;transition:.15s}
+.btn:hover{background:#202040;border-color:#3a3a5a}
+.btn.g{border-color:#1e3a1e;background:#0e1e0e;color:#55cc77}
+.btn.g:hover{background:#162816}
+.btn.a{border-color:#3a2a0a;background:#1e1408;color:#cc9933}
+.btn.a:hover{background:#2a1e0e}
+.btn:disabled{opacity:.3;cursor:not-allowed}
+
+/* ── LAYOUT ──────────────────────────────────── */
+.workspace{display:flex;flex:1;min-height:0}
+
+/* ── LEFT SIDEBAR — sensor list ──────────────── */
+#sidebar{width:210px;flex-shrink:0;background:#0f0f14;border-right:1px solid #1a1a24;
+         display:flex;flex-direction:column;overflow:hidden}
+.sb-title{padding:7px 12px;font-size:9px;font-weight:700;text-transform:uppercase;
+          letter-spacing:.12em;color:#3a3a5a;border-bottom:1px solid #1a1a24;flex-shrink:0}
+#sensor-list{flex:1;overflow-y:auto;padding:5px}
+.sc{border-radius:6px;border:1px solid #1a1a24;margin-bottom:5px;overflow:hidden;transition:.2s}
+.sc:hover{border-color:#2a2a3e}
+.sc-head{display:flex;align-items:center;gap:6px;padding:6px 9px;background:#141420;cursor:pointer;user-select:none}
+.sc-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;transition:.3s}
+.sc-dot.on {background:#22ee77;box-shadow:0 0 5px #22ee7755}
+.sc-dot.off{background:#ee3333;box-shadow:0 0 4px #ee333355}
+.sc-mac{font-size:9px;font-family:monospace;color:#999;flex:1;overflow:hidden;
+        text-overflow:ellipsis;white-space:nowrap}
+.sc-hz{font-size:9px;color:#444}
+.sc-body{padding:5px 9px 8px;background:#0d0d18;display:none}
+.sc.open .sc-body{display:block}
+.sc-row{display:flex;justify-content:space-between;font-size:9px;font-family:monospace;margin-bottom:2px}
+.sc-lbl{color:#444}.sc-val{color:#9999cc}
+.sc-sel{width:100%;margin-top:5px;padding:3px 6px;border-radius:4px;
+        border:1px solid #252535;background:#141428;color:#bbb;font-size:10px;cursor:pointer}
+.sc-sel option{background:#141428}
+.empty-hint{padding:18px 10px;text-align:center;font-size:11px;color:#2a2a3a;line-height:1.8}
+
+/* ── MAIN AREA — 3 tabs, each full width/height ── */
+#main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+
+/* ── MAIN TABS ───────────────────────────────── */
+#main-tabs{display:flex;background:#0f0f14;border-bottom:1px solid #1a1a24;flex-shrink:0}
+.mtab{flex:1;padding:9px 6px;font-size:11px;text-align:center;color:#444;cursor:pointer;
+      border-bottom:2px solid transparent;transition:.15s;user-select:none}
+.mtab:hover{color:#888}
+.mtab.active{color:#aaaaee;border-color:#5555aa;background:#0d0d18}
+
+/* ── TAB PANELS ──────────────────────────────── */
+.mpanel{display:none;flex:1;min-height:0;overflow:hidden}
+.mpanel.active{display:flex}
+
+/* ══════════════════════════════════════════════
+   TAB 1 — SENSOR VIEWER
+══════════════════════════════════════════════ */
+#tab-sensor{flex-direction:row}
+
+/* 3D viewport */
+#vp-sensor{flex:1;position:relative;overflow:hidden;background:#0b0b0f}
+#vp-sensor canvas{display:block;width:100%!important;height:100%!important}
+#axis-lbl-wrap{position:absolute;inset:0;pointer-events:none}
+.albl{position:absolute;font-size:11px;font-weight:700;font-family:monospace;
+      padding:2px 5px;border-radius:3px;transform:translate(-50%,-50%)}
+.albl.x{color:#ff5555;background:rgba(255,60,60,.15)}
+.albl.y{color:#44ff88;background:rgba(60,255,120,.15)}
+.albl.z{color:#4488ff;background:rgba(60,120,255,.15)}
+#vp-hint-s{position:absolute;bottom:10px;right:10px;background:rgba(8,8,14,.88);
+           border:1px solid #1e1e2a;border-radius:6px;padding:7px 10px;
+           font-size:9px;color:#3a3a5a;line-height:1.9;pointer-events:none}
+
+/* Sensor config panel (right of viewport) */
+#sensor-cfg{width:240px;flex-shrink:0;background:#0f0f14;border-left:1px solid #1a1a24;
+            display:flex;flex-direction:column;overflow-y:auto}
+.cfg-section{padding:10px 12px;border-bottom:1px solid #1a1a24}
+.cfg-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
+           color:#3a3a5a;margin-bottom:8px}
+.cfg-row{display:flex;align-items:center;justify-content:space-between;
+         margin-bottom:7px;font-size:11px;color:#777}
+.cfg-check{display:flex;gap:8px;margin-bottom:8px}
+.cfg-check label{display:flex;align-items:center;gap:4px;font-size:10px;color:#666;cursor:pointer}
+.cfg-check input{accent-color:#6666cc;cursor:pointer}
+.cfg-note{font-size:10px;color:#333;line-height:1.6;margin-bottom:6px}
+.cfg-preview{background:#0b0b14;border-radius:4px;border:1px solid #1a1a24;
+             padding:6px 8px;font-size:10px;font-family:monospace;color:#444;margin-bottom:8px}
+.cfg-select{width:100%;padding:4px 7px;border-radius:4px;border:1px solid #252535;
+            background:#141428;color:#bbb;font-size:11px;cursor:pointer;margin-bottom:4px}
+.quat-live{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:4px}
+.qb{background:#0b0b14;border-radius:4px;padding:4px 7px;border:1px solid #1a1a24}
+.qb-lbl{font-size:8px;color:#444}
+.qb-val{font-size:12px;font-family:monospace;color:#9999ee;font-weight:600}
+.cal-status{font-size:10px;text-align:center;min-height:16px;margin-top:4px}
+.range-row{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.range-row label{font-size:10px;color:#555;width:60px;flex-shrink:0}
+.range-row input[type=range]{flex:1;accent-color:#6666cc}
+.range-row span{font-size:10px;font-family:monospace;color:#888;width:36px;text-align:right}
+
+/* ══════════════════════════════════════════════
+   TAB 2 — RAGDOLL
+══════════════════════════════════════════════ */
+#tab-ragdoll{flex-direction:row}
+#vp-ragdoll{flex:1;position:relative;overflow:hidden;background:#080810}
+#vp-ragdoll canvas{display:block;width:100%!important;height:100%!important}
+#axis-lbl-wrap-r{position:absolute;inset:0;pointer-events:none}
+#jbadge-wrap{position:absolute;inset:0;pointer-events:none}
+.jbadge{position:absolute;background:rgba(6,6,16,.93);border:1px solid #2a2a4a;
+        border-radius:4px;padding:2px 6px;font-size:10px;color:#aaaaee;white-space:nowrap}
+#vp-hint-r{position:absolute;bottom:10px;right:10px;background:rgba(8,8,14,.88);
+           border:1px solid #1e1e2a;border-radius:6px;padding:7px 10px;
+           font-size:9px;color:#3a3a5a;line-height:1.9;pointer-events:none}
+
+/* Ragdoll config */
+#ragdoll-cfg{width:240px;flex-shrink:0;background:#0f0f14;border-left:1px solid #1a1a24;
+             display:flex;flex-direction:column;overflow:hidden}
+#ragdoll-cfg-inner{flex:1;overflow-y:auto}
+.bm-wrap{padding:8px 12px}
+.bm-svg{width:100%;height:auto;display:block}
+.bm-node{cursor:pointer;transition:filter .15s}
+.bm-node:hover{filter:brightness(1.5)}
+.bm-txt{font-size:6.5px;fill:#666;pointer-events:none;text-anchor:middle;dominant-baseline:middle}
+.bm-badge{font-size:5.5px;fill:#44cc88;pointer-events:none;text-anchor:middle;font-family:monospace}
+.jlist-wrap{padding:6px 12px 10px}
+.jrow{display:flex;align-items:center;gap:5px;padding:4px 0;border-bottom:1px solid #161620}
+.jrow-nm{color:#666;width:76px;flex-shrink:0;font-size:10px}
+.jrow-bar{height:3px;background:#1a1a24;border-radius:2px;flex:1;overflow:hidden}
+.jrow-fill{height:100%;border-radius:2px;background:#4444aa;transition:width .1s}
+.jrow-ang{font-family:monospace;color:#9999dd;font-size:10px;width:34px;text-align:right;flex-shrink:0}
+
+/* ══════════════════════════════════════════════
+   TAB 3 — LATENCY
+══════════════════════════════════════════════ */
+#tab-latency{flex-direction:column;background:#0b0b0f}
+#lat-top{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+         background:#161620;border-bottom:1px solid #1a1a24;flex-shrink:0}
+.lat-kpi{background:#0f0f14;padding:8px 10px}
+.lat-kpi-val{font-size:18px;font-weight:700;font-family:monospace;color:#9999ee}
+.lat-kpi-lbl{font-size:9px;color:#3a3a5a;margin-top:2px}
+#lat-body{flex:1;overflow-y:auto;display:flex;flex-wrap:wrap;
+          align-content:flex-start;gap:8px;padding:10px}
+.lat-card{width:calc(50% - 4px);min-width:200px;background:#0f0f14;
+          border-radius:7px;border:1px solid #1a1a24;overflow:hidden}
+.lat-card-head{display:flex;align-items:center;gap:6px;padding:6px 9px;background:#131320}
+.lat-card-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.lat-card-mac{font-size:9px;font-family:monospace;color:#888;flex:1;
+              overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lat-grid{display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 8px;gap:4px}
+.lat-metric{text-align:center}
+.lat-mval{font-size:13px;font-family:monospace;font-weight:700}
+.lat-mval.ok{color:#33cc77}.lat-mval.warn{color:#cc9933}.lat-mval.bad{color:#cc4444}
+.lat-mlbl{font-size:8px;color:#333;margin-top:1px}
+.lat-lost-row{padding:0 8px 4px;font-size:9px;color:#cc6655;font-family:monospace;min-height:14px}
+.lat-graph{padding:4px 8px 8px;background:#0b0b14}
+.lat-graph canvas{width:100%!important;border-radius:3px;display:block}
+.lat-disp-section{width:100%;background:#0f0f14;border-radius:7px;border:1px solid #1a1a24;padding:10px 12px}
+.lat-disp-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#3a3a5a;margin-bottom:8px}
+.lat-disp-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:10px}
+.lat-disp-mac{font-family:monospace;color:#777;width:130px;flex-shrink:0}
+.lat-disp-bar-wrap{flex:1;height:10px;background:#161620;border-radius:3px;position:relative;overflow:hidden}
+.lat-disp-bar{position:absolute;height:100%;border-radius:2px}
+.lat-disp-val{font-family:monospace;color:#9999cc;font-size:10px;width:40px;text-align:right;flex-shrink:0}
+
+/* no-serial overlay */
+.no-serial{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
+           justify-content:center;gap:10px;background:rgba(8,8,14,.97);
+           font-size:13px;color:#555;text-align:center;padding:32px;z-index:20}
+.no-serial h2{font-size:16px;color:#aaa;font-weight:500}
+.no-serial code{background:#141428;padding:2px 8px;border-radius:4px;font-size:10px;color:#8888dd}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="topbar">
+  <h1>MoCap Studio</h1>
+  <span id="badge" class="badge off">Desconectado</span>
+  <div class="sp"></div>
+  <button class="btn a" id="btn-cal" onclick="startCalibration()">Calibrar pose</button>
+  <button class="btn g" onclick="resetOrientation()">Reset ejes</button>
+  <button class="btn"   onclick="clearAll()">Limpiar</button>
+  <button class="btn"   id="btn-conn" onclick="connectSerial()">Conectar</button>
+</div>
+
+<div class="workspace">
+
+  <!-- LEFT SIDEBAR -->
+  <div id="sidebar">
+    <div class="sb-title">Sensores</div>
+    <div id="sensor-list">
+      <div class="empty-hint" id="empty-hint">Conecta el<br>receptor ESP32</div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main">
+
+    <!-- TAB BAR -->
+    <div id="main-tabs">
+      <div class="mtab active" onclick="switchTab('sensor')">① Sensor</div>
+      <div class="mtab"        onclick="switchTab('ragdoll')">② Ragdoll</div>
+      <div class="mtab"        onclick="switchTab('latency')">③ Latencia</div>
+    </div>
+
+    <!-- ═══════════ TAB 1: SENSOR VIEWER ═══════════ -->
+    <div id="tab-sensor" class="mpanel active">
+
+      <!-- 3D mini-viewer per sensor -->
+      <div id="vp-sensor">
+        <div id="axis-lbl-wrap"></div>
+        <div id="vp-hint-s">
+          <b style="color:#eee">Vista de sensor</b><br>
+          <span style="color:#ff5555">■</span>X
+          <span style="color:#44ff88">■</span>Y
+          <span style="color:#4488ff">■</span>Z<br>
+          Drag: orbitar · Rueda: zoom
+        </div>
+        <div class="no-serial" id="ns1">
+          <h2>Web Serial no disponible</h2>
+          <p>Usa Chrome o Edge 89+</p>
+        </div>
+      </div>
+
+      <!-- Sensor config -->
+      <div id="sensor-cfg">
+
+        <div class="cfg-section">
+          <div class="cfg-title">Sensor activo</div>
+          <select class="cfg-select" id="active-sensor-sel" onchange="setActiveSensor(this.value)">
+            <option value="">— Ninguno —</option>
+          </select>
+          <div class="quat-live">
+            <div class="qb"><div class="qb-lbl">Qw</div><div class="qb-val" id="live-qw">—</div></div>
+            <div class="qb"><div class="qb-lbl">Qx</div><div class="qb-val" id="live-qx">—</div></div>
+            <div class="qb"><div class="qb-lbl">Qy</div><div class="qb-val" id="live-qy">—</div></div>
+            <div class="qb"><div class="qb-lbl">Qz</div><div class="qb-val" id="live-qz">—</div></div>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-title">Reset de orientación</div>
+          <div class="cfg-note">Selecciona qué ejes neutralizar al aplicar reset.</div>
+          <div class="cfg-check">
+            <label><input type="checkbox" id="ax-x" checked> Roll X</label>
+            <label><input type="checkbox" id="ax-y" checked> Yaw Y</label>
+            <label><input type="checkbox" id="ax-z" checked> Pitch Z</label>
+          </div>
+          <div class="cfg-preview" id="axes-preview">Roll X · Yaw Y · Pitch Z</div>
+          <button class="btn g" style="width:100%;margin-top:4px" onclick="resetOrientation()">Aplicar reset</button>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-title">Calibración de pose</div>
+          <div class="cfg-note">Coloca el sensor en posición de referencia y captura la pose cero.</div>
+          <button class="btn a" style="width:100%" onclick="startCalibration()">Capturar referencia (3s)</button>
+          <div class="cal-status" id="cal-status-s"></div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-title">Representación 3D</div>
+          <div class="range-row">
+            <label>Tamaño</label>
+            <input type="range" min="0.5" max="3" step="0.1" value="1"
+                   oninput="setSensorScale(this.value);document.getElementById('sv-scale-lbl').textContent=parseFloat(this.value).toFixed(1)">
+            <span id="sv-scale-lbl">1.0</span>
+          </div>
+          <div class="cfg-check">
+            <label><input type="checkbox" id="show-axes-s" checked onchange="toggleSensorAxes()"> Mostrar ejes</label>
+            <label><input type="checkbox" id="show-grid-s" checked onchange="toggleSensorGrid()"> Grid</label>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-title">Asignar al cuerpo</div>
+          <div class="cfg-note">Vincula este sensor a un segmento del ragdoll.</div>
+          <select class="cfg-select" id="seg-assign-sel" onchange="assignActiveSensor(this.value)">
+            <option value="">— Sin asignar —</option>
+          </select>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══════════ TAB 2: RAGDOLL ═══════════ -->
+    <div id="tab-ragdoll" class="mpanel">
+
+      <div id="vp-ragdoll">
+        <div id="axis-lbl-wrap-r"></div>
+        <div id="jbadge-wrap"></div>
+        <div id="vp-hint-r">
+          <b style="color:#eee">Ragdoll MoCap</b><br>
+          <span style="color:#ff5555">■</span>X
+          <span style="color:#44ff88">■</span>Y
+          <span style="color:#4488ff">■</span>Z<br>
+          Drag: orbitar · Rueda: zoom
+        </div>
+      </div>
+
+      <div id="ragdoll-cfg">
+        <div id="ragdoll-cfg-inner">
+          <div class="bm-wrap">
+            <div class="cfg-title" style="padding:8px 0 6px">Mapa corporal</div>
+            <div style="font-size:9px;color:#333;margin-bottom:6px">Clic en segmento para asignar sensor</div>
+            <svg id="body-svg" class="bm-svg" viewBox="0 0 130 330" xmlns="http://www.w3.org/2000/svg"></svg>
+          </div>
+          <div class="jlist-wrap">
+            <div class="cfg-title" style="padding:0 0 6px">Ángulos articulares</div>
+            <div id="joint-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ TAB 3: LATENCY ═══════════ -->
+    <div id="tab-latency" class="mpanel">
+
+      <!-- KPI row -->
+      <div id="lat-top">
+        <div class="lat-kpi"><div class="lat-kpi-val" id="lk-mean">--</div><div class="lat-kpi-lbl">Latencia media (ms)</div></div>
+        <div class="lat-kpi"><div class="lat-kpi-val" id="lk-jitter">--</div><div class="lat-kpi-lbl">Jitter σ (ms)</div></div>
+        <div class="lat-kpi"><div class="lat-kpi-val" id="lk-disp">--</div><div class="lat-kpi-lbl">Dispersión inter-nodo (ms)</div></div>
+        <div class="lat-kpi"><div class="lat-kpi-val" id="lk-lost">--</div><div class="lat-kpi-lbl">Paquetes perdidos</div></div>
+      </div>
+
+      <!-- Per-node cards + dispersion chart -->
+      <div id="lat-body"></div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /workspace -->
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════
+const COLORS = [0x6677ff,0xff6677,0x55ffaa,0xffcc55,0xff55dd,0x55ddff,0xaaff55,0xff9955,0xcc77ff,0xff99bb];
+const EXPECTED_MS = 1000/60;
+const MAX_SAMPLES = 180;
+
+const SKELETON = [
+  {id:'hips',      label:'Cadera',     parent:null,          jpos:[0,0,0],            sz:[.34,.15,.22], col:0x334488},
+  {id:'abdomen',   label:'Abdomen',    parent:'hips',        jpos:[0,.18,0],           sz:[.28,.18,.20], col:0x3355aa},
+  {id:'chest',     label:'Pecho',      parent:'abdomen',     jpos:[0,.22,0],           sz:[.38,.24,.22], col:0x3366bb},
+  {id:'neck',      label:'Cuello',     parent:'chest',       jpos:[0,.20,0],           sz:[.10,.12,.10], col:0x4477cc},
+  {id:'head',      label:'Cabeza',     parent:'neck',        jpos:[0,.13,0],           sz:[.22,.25,.22], col:0x44aadd},
+  {id:'l-clavicle',label:'Clav Izq',   parent:'chest',       jpos:[-.20,.10,0],        sz:[.09,.09,.09], col:0x336688},
+  {id:'l-uarm',    label:'Brazo Izq',  parent:'l-clavicle',  jpos:[-.13,-.04,0],       sz:[.10,.28,.10], col:0x3377aa},
+  {id:'l-farm',    label:'Ante Izq',   parent:'l-uarm',      jpos:[0,-.28,0],           sz:[.09,.26,.09], col:0x3388bb},
+  {id:'l-hand',    label:'Mano Izq',   parent:'l-farm',      jpos:[0,-.22,0],           sz:[.08,.12,.06], col:0x44aacc},
+  {id:'r-clavicle',label:'Clav Der',   parent:'chest',       jpos:[.20,.10,0],         sz:[.09,.09,.09], col:0x886633},
+  {id:'r-uarm',    label:'Brazo Der',  parent:'r-clavicle',  jpos:[.13,-.04,0],        sz:[.10,.28,.10], col:0xaa7733},
+  {id:'r-farm',    label:'Ante Der',   parent:'r-uarm',      jpos:[0,-.28,0],           sz:[.09,.26,.09], col:0xbb8833},
+  {id:'r-hand',    label:'Mano Der',   parent:'r-farm',      jpos:[0,-.22,0],           sz:[.08,.12,.06], col:0xccaa44},
+  {id:'l-thigh',   label:'Muslo Izq',  parent:'hips',        jpos:[-.10,-.10,0],       sz:[.13,.34,.13], col:0x335599},
+  {id:'l-shin',    label:'Tibia Izq',  parent:'l-thigh',     jpos:[0,-.34,0],           sz:[.11,.32,.11], col:0x3366aa},
+  {id:'l-foot',    label:'Pie Izq',    parent:'l-shin',      jpos:[0,-.27,.05],         sz:[.10,.07,.22], col:0x4477bb},
+  {id:'r-thigh',   label:'Muslo Der',  parent:'hips',        jpos:[.10,-.10,0],        sz:[.13,.34,.13], col:0x664433},
+  {id:'r-shin',    label:'Tibia Der',  parent:'r-thigh',     jpos:[0,-.34,0],           sz:[.11,.32,.11], col:0x775544},
+  {id:'r-foot',    label:'Pie Der',    parent:'r-shin',      jpos:[0,-.27,.05],         sz:[.10,.07,.22], col:0x886655},
+];
+
+const JOINT_PAIRS = [
+  {name:'Codo Izq',   a:'l-uarm',   b:'l-farm'},
+  {name:'Codo Der',   a:'r-uarm',   b:'r-farm'},
+  {name:'Hombro Izq', a:'chest',    b:'l-uarm'},
+  {name:'Hombro Der', a:'chest',    b:'r-uarm'},
+  {name:'Rodilla Izq',a:'l-thigh',  b:'l-shin'},
+  {name:'Rodilla Der',a:'r-thigh',  b:'r-shin'},
+  {name:'Cadera Izq', a:'hips',     b:'l-thigh'},
+  {name:'Cadera Der', a:'hips',     b:'r-thigh'},
+  {name:'Tobillo Izq',a:'l-shin',   b:'l-foot'},
+  {name:'Tobillo Der',a:'r-shin',   b:'r-foot'},
+  {name:'Lumbar',     a:'chest',    b:'abdomen'},
+  {name:'Cuello',     a:'chest',    b:'head'},
+];
+
+// SVG body map positions [cx, cy, rx, ry] — all in 130×330 viewBox
+const SVG_POS = {
+  hips:       [65,185,17,9],
+  abdomen:    [65,163,14,10],
+  chest:      [65,136,19,13],
+  neck:       [65,116, 5, 7],
+  head:       [65, 95,13,14],
+  'l-clavicle':[43,122, 5,5],
+  'l-uarm':   [33,143, 6,14],
+  'l-farm':   [24,172, 5,12],
+  'l-hand':   [20,196, 5, 7],
+  'r-clavicle':[87,122, 5,5],
+  'r-uarm':   [97,143, 6,14],
+  'r-farm':   [106,172,5,12],
+  'r-hand':   [110,196,5, 7],
+  'l-thigh':  [55,207, 7,17],
+  'l-shin':   [53,241, 6,15],
+  'l-foot':   [46,267,10, 5],
+  'r-thigh':  [75,207, 7,17],
+  'r-shin':   [77,241, 6,15],
+  'r-foot':   [84,267,10, 5],
+};
+const SVG_EDGES=[
+  ['head','neck'],['neck','chest'],['chest','abdomen'],['abdomen','hips'],
+  ['chest','l-clavicle'],['l-clavicle','l-uarm'],['l-uarm','l-farm'],['l-farm','l-hand'],
+  ['chest','r-clavicle'],['r-clavicle','r-uarm'],['r-uarm','r-farm'],['r-farm','r-hand'],
+  ['hips','l-thigh'],['l-thigh','l-shin'],['l-shin','l-foot'],
+  ['hips','r-thigh'],['r-thigh','r-shin'],['r-shin','r-foot'],
+];
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+const sensors     = new Map(); // mac -> sensor obj
+const segAssign   = new Map(); // segId -> mac
+let   activeMac   = null;
+let   serialPort, reader, lineBuf='';
+
+function getTimeout(){ return +(document.getElementById('cfg-timeout-val')||{value:300}).value||300; }
+function getSegMac(id){ return segAssign.get(id)||null; }
+function getMacSeg(mac){ for(const[k,v] of segAssign) if(v===mac)return k; return null; }
+
+// ═══════════════════════════════════════════════════════
+// THREE.JS — SENSOR VIEWPORT
+// ═══════════════════════════════════════════════════════
+const sRenderer = new THREE.WebGLRenderer({antialias:true,alpha:false});
+sRenderer.setPixelRatio(devicePixelRatio);
+sRenderer.setClearColor(0x0b0b0f,1);
+document.getElementById('vp-sensor').prepend(sRenderer.domElement);
+
+const sScene  = new THREE.Scene();
+const sCamera = new THREE.PerspectiveCamera(50,1,0.05,50);
+sCamera.position.set(0,.3,3.2);
+sCamera.lookAt(0,0,0);
+
+sScene.add(new THREE.AmbientLight(0xffffff,.55));
+const sSun=new THREE.DirectionalLight(0xffffff,.9); sSun.position.set(3,5,4); sScene.add(sSun);
+const sRim=new THREE.DirectionalLight(0x8899ff,.3); sRim.position.set(-4,-3,-4); sScene.add(sRim);
+
+const sGrid=new THREE.GridHelper(6,16,0x181828,0x141422); sScene.add(sGrid);
+
+// World axes for sensor view
+function buildAxes(scene,len){
+  const g=new THREE.Group();
+  [[len,0,0,0xff4444],[0,len,0,0x44ff88],[0,0,len,0x4488ff]].forEach(([x,y,z,c])=>{
+    const geo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(x,y,z)]);
+    g.add(new THREE.Line(geo,new THREE.LineBasicMaterial({color:c})));
+  });
+  scene.add(g); return g;
+}
+buildAxes(sScene,2);
+
+// Current sensor mesh shown in tab 1
+let sActiveMesh=null;
+const sMeshGroup=new THREE.Group(); sScene.add(sMeshGroup);
+
+function makeSensorMesh(colorHex){
+  const g=new THREE.Group();
+  const bmat=new THREE.MeshPhongMaterial({color:colorHex,shininess:55,transparent:true,opacity:.87});
+  const body=new THREE.Mesh(new THREE.BoxGeometry(1,.14,.65),bmat);
+  const edges=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1,.14,.65)),
+    new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:.1}));
+  const ledMat=new THREE.MeshPhongMaterial({color:0x22ee77,emissive:0x22ee77,emissiveIntensity:.9});
+  const led=new THREE.Mesh(new THREE.BoxGeometry(.09,.035,.09),ledMat);
+  led.position.set(-.41,.09,.26);
+  // per-mesh local axes
+  const ax=buildLocalAxes(.55);
+  g.add(body,edges,led,ax);
+  g.userData={ledMat,axGroup:ax};
+  return g;
+}
+
+function buildLocalAxes(len){
+  const g=new THREE.Group();
+  [[len,0,0,0xff4444],[0,len,0,0x44ff88],[0,0,len,0x4488ff]].forEach(([x,y,z,c])=>{
+    const geo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(x,y,z)]);
+    g.add(new THREE.Line(geo,new THREE.LineBasicMaterial({color:c})));
+  });
+  return g;
+}
+
+// Orbit for sensor view
+let sPhi=1.2,sTheta=.4,sRadius=3.2,sOrb=false,slx=0,sly=0;
+sRenderer.domElement.addEventListener('mousedown',e=>{sOrb=true;slx=e.clientX;sly=e.clientY});
+window.addEventListener('mouseup',()=>sOrb=false);
+window.addEventListener('mousemove',e=>{
+  if(!sOrb)return;
+  sTheta-=(e.clientX-slx)*.008; sPhi=Math.max(.05,Math.min(Math.PI-.05,sPhi+(e.clientY-sly)*.008));
+  slx=e.clientX;sly=e.clientY; updateSCam();
+});
+sRenderer.domElement.addEventListener('wheel',e=>{
+  sRadius=Math.max(.8,Math.min(10,sRadius+e.deltaY*.01)); updateSCam();
+},{passive:true});
+function updateSCam(){
+  sCamera.position.set(sRadius*Math.sin(sPhi)*Math.sin(sTheta),sRadius*Math.cos(sPhi),
+                       sRadius*Math.sin(sPhi)*Math.cos(sTheta));
+  sCamera.lookAt(0,0,0);
+}
+const sRO=new ResizeObserver(()=>{
+  const el=document.getElementById('vp-sensor');
+  sRenderer.setSize(el.clientWidth,el.clientHeight);
+  sCamera.aspect=el.clientWidth/el.clientHeight;
+  sCamera.updateProjectionMatrix();
+});
+sRO.observe(document.getElementById('vp-sensor'));
+
+// ═══════════════════════════════════════════════════════
+// THREE.JS — RAGDOLL VIEWPORT
+// ═══════════════════════════════════════════════════════
+const rRenderer=new THREE.WebGLRenderer({antialias:true});
+rRenderer.setPixelRatio(devicePixelRatio);
+rRenderer.setClearColor(0x08080f,1);
+rRenderer.shadowMap.enabled=true;
+document.getElementById('vp-ragdoll').prepend(rRenderer.domElement);
+
+const rScene=new THREE.Scene();
+rScene.fog=new THREE.FogExp2(0x08080f,.035);
+const rCamera=new THREE.PerspectiveCamera(48,1,0.05,120);
+rCamera.position.set(0,1.1,4.2); rCamera.lookAt(0,.7,0);
+
+rScene.add(new THREE.AmbientLight(0xffffff,.5));
+const rSun=new THREE.DirectionalLight(0xffffff,.85); rSun.position.set(4,8,4); rSun.castShadow=true; rScene.add(rSun);
+const rRim=new THREE.DirectionalLight(0x8899ff,.3); rRim.position.set(-4,-3,-4); rScene.add(rRim);
+
+const rFloor=new THREE.Mesh(new THREE.PlaneGeometry(16,16),
+  new THREE.MeshStandardMaterial({color:0x111120,roughness:1}));
+rFloor.rotation.x=-Math.PI/2; rFloor.receiveShadow=true; rScene.add(rFloor);
+rScene.add(new THREE.GridHelper(10,20,0x161626,0x141424));
+buildAxes(rScene,2);
+
+// Orbit for ragdoll
+let rPhi=1.15,rTheta=.35,rRadius=4.2,rOrb=false,rlx=0,rly=0;
+const rTarget=new THREE.Vector3(0,.7,0);
+rRenderer.domElement.addEventListener('mousedown',e=>{rOrb=true;rlx=e.clientX;rly=e.clientY});
+window.addEventListener('mouseup',()=>rOrb=false);
+window.addEventListener('mousemove',e=>{
+  if(!rOrb)return;
+  rTheta-=(e.clientX-rlx)*.007; rPhi=Math.max(.05,Math.min(Math.PI-.05,rPhi+(e.clientY-rly)*.007));
+  rlx=e.clientX;rly=e.clientY; updateRCam();
+});
+rRenderer.domElement.addEventListener('wheel',e=>{
+  rRadius=Math.max(1,Math.min(18,rRadius+e.deltaY*.011)); updateRCam();
+},{passive:true});
+function updateRCam(){
+  rCamera.position.set(
+    rTarget.x+rRadius*Math.sin(rPhi)*Math.sin(rTheta),
+    rTarget.y+rRadius*Math.cos(rPhi),
+    rTarget.z+rRadius*Math.sin(rPhi)*Math.cos(rTheta));
+  rCamera.lookAt(rTarget);
+}
+const rRO=new ResizeObserver(()=>{
+  const el=document.getElementById('vp-ragdoll');
+  rRenderer.setSize(el.clientWidth,el.clientHeight);
+  rCamera.aspect=el.clientWidth/el.clientHeight;
+  rCamera.updateProjectionMatrix();
+});
+rRO.observe(document.getElementById('vp-ragdoll'));
+
+// ── RAGDOLL BUILD ──────────────────────────────────────
+const rRoot=new THREE.Group();
+rRoot.position.set(0,.95,0); // hips height
+rScene.add(rRoot);
+
+const segNodes=new Map(); // id -> {pivot, meshGrp, mesh, ledMat, mat}
+
+function buildRagdoll(){
+  SKELETON.forEach(def=>{
+    const pivot   = new THREE.Group();
+    const meshGrp = new THREE.Group();
+    const [bw,bh,bd]=def.sz;
+    const mat=new THREE.MeshPhongMaterial({color:def.col,shininess:35,transparent:true,opacity:.88});
+    const mesh=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),mat);
+    mesh.castShadow=true;
+    mesh.position.y=-bh/2; // top of box at pivot
+    const edges=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(bw,bh,bd)),
+      new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:.07}));
+    edges.position.y=-bh/2;
+    // joint sphere indicator
+    const ledMat=new THREE.MeshPhongMaterial({color:0x222244,emissive:0x111133,emissiveIntensity:1});
+    const sphere=new THREE.Mesh(new THREE.SphereGeometry(.025,8,8),ledMat);
+    meshGrp.add(mesh,edges,sphere);
+    pivot.add(meshGrp);
+
+    if(!def.parent){
+      rRoot.add(pivot);
+    } else {
+      const pNode=segNodes.get(def.parent);
+      const pDef =SKELETON.find(s=>s.id===def.parent);
+      const [jx,jy,jz]=def.jpos;
+      // pivot position relative to parent's meshGrp = jpos offset - parent bone height
+      pivot.position.set(jx, jy-pDef.sz[1], jz);
+      pNode.meshGrp.add(pivot);
+    }
+    segNodes.set(def.id,{pivot,meshGrp,mesh,ledMat,mat});
+  });
+}
+buildRagdoll();
+
+// ═══════════════════════════════════════════════════════
+// SENSORS
+// ═══════════════════════════════════════════════════════
+function getOrCreateSensor(mac){
+  if(sensors.has(mac)) return sensors.get(mac);
+  const idx=sensors.size;
+  const colorHex=COLORS[idx%COLORS.length];
+  const macKey=mac.replace(/:/g,'');
+
+  // Mesh for sensor view
+  const mesh=makeSensorMesh(colorHex);
+  sMeshGroup.add(mesh);
+  mesh.visible=false;
+
+  // Sidebar card
+  document.getElementById('empty-hint').style.display='none';
+  const card=document.createElement('div');
+  card.className='sc'; card.id='sc-'+macKey;
+  card.innerHTML=`
+    <div class="sc-head" onclick="toggleCard('${mac}')">
+      <div class="sc-dot off" id="dot-${macKey}"></div>
+      <span class="sc-mac">${mac}</span>
+      <span class="sc-hz" id="hz-${macKey}">--</span>
+    </div>
+    <div class="sc-body">
+      <div class="sc-row"><span class="sc-lbl">Qw</span><span class="sc-val" id="sq-qw-${macKey}">—</span></div>
+      <div class="sc-row"><span class="sc-lbl">Qx</span><span class="sc-val" id="sq-qx-${macKey}">—</span></div>
+      <div class="sc-row"><span class="sc-lbl">Qy</span><span class="sc-val" id="sq-qy-${macKey}">—</span></div>
+      <div class="sc-row"><span class="sc-lbl">Qz</span><span class="sc-val" id="sq-qz-${macKey}">—</span></div>
+      <select class="sc-sel" onchange="assignSensor('${mac}',this.value)">
+        <option value="">— Sin asignar —</option>
+        ${SKELETON.map(s=>`<option value="${s.id}">${s.label}</option>`).join('')}
+      </select>
+    </div>`;
+  document.getElementById('sensor-list').appendChild(card);
+
+  // Selector in tab 1
+  const opt=document.createElement('option');
+  opt.value=mac; opt.textContent=mac;
+  document.getElementById('active-sensor-sel').appendChild(opt);
+
+  const s={mac,colorHex,mesh,
+    quat:new THREE.Quaternion(),
+    offsetQuat:null,calibQuat:null,
+    lastPktTime:0,pktTimes:[],
+    latIntervals:[],latLost:0,latTotal:0,latLastT:0};
+  sensors.set(mac,s);
+
+  if(!activeMac) setActiveSensor(mac);
+  rebuildBodySVG();
+  return s;
+}
+
+function toggleCard(mac){
+  document.getElementById('sc-'+mac.replace(/:/g,''))?.classList.toggle('open');
+}
+
+function setActiveSensor(mac){
+  activeMac=mac;
+  // hide all meshes, show active
+  sensors.forEach((s,m)=>{ s.mesh.visible=(m===mac); });
+  document.getElementById('active-sensor-sel').value=mac||'';
+  // update assignment selector
+  const sel=document.getElementById('seg-assign-sel');
+  if(sel){
+    // populate if empty
+    if(sel.options.length<=1){
+      SKELETON.forEach(def=>{
+        const o=document.createElement('option');
+        o.value=def.id; o.textContent=def.label; sel.appendChild(o);
+      });
+    }
+    sel.value=getMacSeg(mac)||'';
+  }
+}
+
+function assignActiveSensor(segId){
+  if(!activeMac)return;
+  assignSensor(activeMac,segId);
+}
+
+function assignSensor(mac,segId){
+  for(const[k,v] of segAssign) if(v===mac) segAssign.delete(k);
+  if(segId) segAssign.set(segId,mac);
+  // sync sidebar dropdown
+  const macKey=mac.replace(/:/g,'');
+  const sel=document.querySelector('#sc-'+macKey+' .sc-sel');
+  if(sel) sel.value=segId||'';
+  if(mac===activeMac){
+    const as=document.getElementById('seg-assign-sel');
+    if(as) as.value=segId||'';
+  }
+  rebuildBodySVG();
+}
+
+// ── OFFSET LOGIC ───────────────────────────────────────
+function getDisplayQuat(s){
+  let q=s.quat.clone();
+  if(s.calibQuat) q.premultiply(s.calibQuat);
+  if(!s.offsetQuat) return q;
+  const ax={x:document.getElementById('ax-x').checked,
+            y:document.getElementById('ax-y').checked,
+            z:document.getElementById('ax-z').checked};
+  const e=new THREE.Euler().setFromQuaternion(s.offsetQuat.clone(),'XYZ');
+  if(!ax.x)e.x=0; if(!ax.y)e.y=0; if(!ax.z)e.z=0;
+  return q.clone().premultiply(new THREE.Quaternion().setFromEuler(e));
+}
+
+function resetOrientation(){
+  sensors.forEach(s=>{ s.offsetQuat=s.quat.clone().invert(); });
+  updateAxesPreview();
+}
+
+function updateAxesPreview(){
+  const labels=[];
+  if(document.getElementById('ax-x').checked)labels.push('Roll X');
+  if(document.getElementById('ax-y').checked)labels.push('Yaw Y');
+  if(document.getElementById('ax-z').checked)labels.push('Pitch Z');
+  const el=document.getElementById('axes-preview');
+  if(el) el.textContent=labels.length?labels.join(' · '):'Ningún eje';
+}
+['ax-x','ax-y','ax-z'].forEach(id=>document.getElementById(id).addEventListener('change',updateAxesPreview));
+
+function startCalibration(){
+  const statusEls=['cal-status-s'].map(id=>document.getElementById(id));
+  let n=3;
+  statusEls.forEach(el=>{ if(el){el.textContent=`Capturando en ${n}…`;el.style.color='#cc9933';} });
+  const iv=setInterval(()=>{
+    n--;
+    if(n>0){ statusEls.forEach(el=>{ if(el)el.textContent=`Capturando en ${n}…`; }); }
+    else{
+      clearInterval(iv);
+      sensors.forEach(s=>{ s.calibQuat=s.quat.clone().invert(); });
+      statusEls.forEach(el=>{ if(el){el.textContent='✓ Pose registrada';el.style.color='#33cc77';} });
+      setTimeout(()=>statusEls.forEach(el=>{ if(el){el.textContent='';el.style.color='';} }),3000);
+    }
+  },1000);
+}
+
+// ── SENSOR MESH SCALE ──────────────────────────────────
+function setSensorScale(v){
+  sMeshGroup.scale.setScalar(parseFloat(v));
+}
+function toggleSensorAxes(){
+  sensors.forEach(s=>{
+    const ax=s.mesh.userData.axGroup;
+    if(ax) ax.visible=document.getElementById('show-axes-s').checked;
+  });
+}
+function toggleSensorGrid(){ sGrid.visible=document.getElementById('show-grid-s').checked; }
+
+// ═══════════════════════════════════════════════════════
+// UPDATE SENSOR DATA
+// ═══════════════════════════════════════════════════════
+function updateSensor(mac,qw,qx,qy,qz){
+  const s=getOrCreateSensor(mac);
+  const macKey=mac.replace(/:/g,'');
+  const now=performance.now();
+  s.quat.set(qx,qy,qz,qw);
+  s.lastPktTime=now;
+
+  // Hz
+  s.pktTimes.push(now);
+  s.pktTimes=s.pktTimes.filter(t=>now-t<1000);
+  const hz=s.pktTimes.length;
+  const hzEl=document.getElementById('hz-'+macKey);
+  if(hzEl)hzEl.textContent=hz+' Hz';
+
+  // Sidebar quaternion
+  ['qw','qx','qy','qz'].forEach((n,i)=>{
+    const el=document.getElementById('sq-'+n+'-'+macKey);
+    if(el)el.textContent=[qw,qx,qy,qz][i].toFixed(4);
+  });
+
+  // LED sidebar
+  const dot=document.getElementById('dot-'+macKey);
+  if(dot){dot.className='sc-dot on';}
+
+  // LED mesh
+  const lm=s.mesh.userData.ledMat;
+  if(lm){lm.color.setHex(0x22ee77);lm.emissive.setHex(0x22ee77);}
+
+  // Apply to sensor mesh
+  const dq=getDisplayQuat(s);
+  s.mesh.setRotationFromQuaternion(dq);
+
+  // Live readout in tab 1
+  if(mac===activeMac){
+    document.getElementById('live-qw').textContent=qw.toFixed(4);
+    document.getElementById('live-qx').textContent=qx.toFixed(4);
+    document.getElementById('live-qy').textContent=qy.toFixed(4);
+    document.getElementById('live-qz').textContent=qz.toFixed(4);
+  }
+
+  // Latency tracking
+  if(s.latLastT>0){
+    const intv=now-s.latLastT;
+    s.latIntervals.push(intv);
+    if(s.latIntervals.length>MAX_SAMPLES)s.latIntervals.shift();
+    const missed=Math.round(intv/EXPECTED_MS)-1;
+    if(missed>0)s.latLost+=missed;
+  }
+  s.latLastT=now;
+  s.latTotal++;
+}
+
+// ═══════════════════════════════════════════════════════
+// WATCHDOG
+// ═══════════════════════════════════════════════════════
+setInterval(()=>{
+  const now=performance.now(), TO=500;
+  sensors.forEach((s,mac)=>{
+    const macKey=mac.replace(/:/g,'');
+    const alive=now-s.lastPktTime<TO;
+    const dot=document.getElementById('dot-'+macKey);
+    if(dot)dot.className='sc-dot '+(alive?'on':'off');
+    const lm=s.mesh.userData.ledMat;
+    if(lm){lm.color.setHex(alive?0x22ee77:0xee3333);lm.emissive.setHex(alive?0x22ee77:0xee2222);}
+    if(!alive){const h=document.getElementById('hz-'+macKey);if(h)h.textContent='--';}
+  });
+  applyRagdollAll();
+  updateBodySVGColors();
+},160);
+
+// ═══════════════════════════════════════════════════════
+// RAGDOLL APPLICATION
+// ═══════════════════════════════════════════════════════
+function applyRagdollAll(){
+  const now=performance.now(),TO=600;
+  SKELETON.forEach(def=>{
+    const node=segNodes.get(def.id); if(!node)return;
+    const mac=getSegMac(def.id);
+    if(!mac){
+      node.meshGrp.quaternion.set(0,0,0,1);
+      node.ledMat.color.setHex(0x222244);
+      node.ledMat.emissive.setHex(0x111133);
+      return;
+    }
+    const s=sensors.get(mac); if(!s)return;
+    const alive=now-s.lastPktTime<TO;
+    node.meshGrp.setRotationFromQuaternion(getDisplayQuat(s));
+    node.ledMat.color.setHex(alive?0x22ee77:0xee3333);
+    node.ledMat.emissive.setHex(alive?0x22ee77:0xee2222);
+    node.ledMat.emissiveIntensity=alive?.9:.6;
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// JOINT ANGLES
+// ═══════════════════════════════════════════════════════
+function getAngle(a,b){
+  const mA=getSegMac(a),mB=getSegMac(b); if(!mA||!mB)return null;
+  const sA=sensors.get(mA),sB=sensors.get(mB); if(!sA||!sB)return null;
+  const fwd=new THREE.Vector3(0,-1,0);
+  const vA=fwd.clone().applyQuaternion(getDisplayQuat(sA));
+  const vB=fwd.clone().applyQuaternion(getDisplayQuat(sB));
+  return Math.round(Math.acos(Math.max(-1,Math.min(1,vA.dot(vB))))*(180/Math.PI));
+}
+
+const jBadges=new Map();
+function updateJointList(){
+  const list=document.getElementById('joint-list');
+  list.innerHTML='';
+  let any=false;
+  JOINT_PAIRS.forEach(jp=>{
+    const ang=getAngle(jp.a,jp.b); if(ang===null)return;
+    any=true;
+    const pct=Math.min(100,ang/180*100);
+    const row=document.createElement('div');
+    row.className='jrow';
+    row.innerHTML=`<span class="jrow-nm">${jp.name}</span>
+      <div class="jrow-bar"><div class="jrow-fill" style="width:${pct}%"></div></div>
+      <span class="jrow-ang">${ang}°</span>`;
+    list.appendChild(row);
+  });
+  if(!any)list.innerHTML='<div style="font-size:10px;color:#2a2a3a;padding:8px 0;line-height:1.7">Asigna sensores a<br>segmentos adyacentes</div>';
+}
+
+function updateJointBadges(){
+  const wrap=document.getElementById('jbadge-wrap');
+  jBadges.forEach(el=>el.style.display='none');
+  const vp=document.getElementById('vp-ragdoll');
+  JOINT_PAIRS.forEach(jp=>{
+    const ang=getAngle(jp.a,jp.b); if(ang===null)return;
+    const nA=segNodes.get(jp.a),nB=segNodes.get(jp.b); if(!nA||!nB)return;
+    const wA=new THREE.Vector3(),wB=new THREE.Vector3();
+    nA.pivot.getWorldPosition(wA); nB.pivot.getWorldPosition(wB);
+    const mid=wA.lerp(wB,.5); mid.y+=.12;
+    const v=mid.clone().project(rCamera);
+    const x=(v.x*.5+.5)*vp.clientWidth, y=(-.5*v.y+.5)*vp.clientHeight;
+    if(x<0||x>vp.clientWidth||y<0||y>vp.clientHeight)return;
+    const key=jp.a+jp.b;
+    if(!jBadges.has(key)){
+      const el=document.createElement('div');
+      el.className='jbadge'; wrap.appendChild(el); jBadges.set(key,el);
+    }
+    const el=jBadges.get(key);
+    el.style.display=''; el.style.left=x+'px'; el.style.top=y+'px';
+    el.textContent=jp.name+': '+ang+'°';
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// AXIS LABELS (projected)
+// ═══════════════════════════════════════════════════════
+function updateAxisLabels(wrapperId, camera, vpId){
+  const wrap=document.getElementById(wrapperId),vp=document.getElementById(vpId);
+  if(!wrap||!vp)return;
+  wrap.innerHTML='';
+  [{l:'X',c:'x',p:new THREE.Vector3(2.4,0,0)},
+   {l:'Y',c:'y',p:new THREE.Vector3(0,2.4,0)},
+   {l:'Z',c:'z',p:new THREE.Vector3(0,0,2.4)}].forEach(({l,c,p})=>{
+    const v=p.clone().project(camera);
+    const x=(v.x*.5+.5)*vp.clientWidth, y=(-.5*v.y+.5)*vp.clientHeight;
+    if(x<0||x>vp.clientWidth||y<0||y>vp.clientHeight)return;
+    const d=document.createElement('div');
+    d.className='albl '+c; d.textContent=l;
+    d.style.left=x+'px'; d.style.top=y+'px';
+    wrap.appendChild(d);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// BODY SVG
+// ═══════════════════════════════════════════════════════
+function rebuildBodySVG(){
+  const svg=document.getElementById('body-svg'); if(!svg)return;
+  const ns='http://www.w3.org/2000/svg';
+  svg.innerHTML='';
+  SVG_EDGES.forEach(([a,b])=>{
+    const pA=SVG_POS[a],pB=SVG_POS[b]; if(!pA||!pB)return;
+    const l=document.createElementNS(ns,'line');
+    l.setAttribute('x1',pA[0]);l.setAttribute('y1',pA[1]);
+    l.setAttribute('x2',pB[0]);l.setAttribute('y2',pB[1]);
+    l.setAttribute('stroke','#1a1a28');l.setAttribute('stroke-width','1.2');
+    svg.appendChild(l);
+  });
+  SKELETON.forEach(def=>{
+    const p=SVG_POS[def.id]; if(!p)return;
+    const [cx,cy,rx,ry]=p;
+    const g=document.createElementNS(ns,'g');
+    g.style.cursor='pointer';
+    g.addEventListener('click',()=>openAssignDialog(def.id));
+    const el=document.createElementNS(ns,'ellipse');
+    el.setAttribute('cx',cx);el.setAttribute('cy',cy);
+    el.setAttribute('rx',rx);el.setAttribute('ry',ry);
+    el.setAttribute('fill','#1a1a2e');el.setAttribute('stroke','#252540');
+    el.setAttribute('stroke-width','1');el.setAttribute('class','bm-node');
+    el.setAttribute('id','bme-'+def.id);
+    const lbl=document.createElementNS(ns,'text');
+    lbl.setAttribute('x',cx);lbl.setAttribute('y',cy);
+    lbl.setAttribute('class','bm-txt');lbl.textContent=def.label.slice(0,6);
+    const badge=document.createElementNS(ns,'text');
+    badge.setAttribute('x',cx);badge.setAttribute('y',cy+ry+7);
+    badge.setAttribute('class','bm-badge');badge.setAttribute('id','bmb-'+def.id);
+    g.appendChild(el);g.appendChild(lbl);g.appendChild(badge);
+    svg.appendChild(g);
+  });
+  updateBodySVGColors();
+}
+
+function updateBodySVGColors(){
+  const now=performance.now(),TO=600;
+  SKELETON.forEach(def=>{
+    const shape=document.getElementById('bme-'+def.id);
+    const badge=document.getElementById('bmb-'+def.id);
+    if(!shape)return;
+    const mac=getSegMac(def.id);
+    if(!mac){shape.setAttribute('fill','#1a1a2e');if(badge)badge.textContent='';return;}
+    const s=sensors.get(mac);
+    const alive=s&&now-s.lastPktTime<TO;
+    shape.setAttribute('fill',alive?'#2a3a7a':'#22224a');
+    if(badge)badge.textContent=mac.slice(-5);
+  });
+}
+
+function openAssignDialog(segId){
+  const def=SKELETON.find(s=>s.id===segId); if(!def)return;
+  const macList=Array.from(sensors.keys());
+  if(!macList.length){alert('No hay sensores conectados.');return;}
+  const cur=getSegMac(segId)||'';
+  const opts=macList.map((m,i)=>`${i+1}. ${m}`).join('\n');
+  const val=prompt(`Asignar sensor a: ${def.label}\n\n${opts}\n\nPega la MAC (o vacío para quitar):`,cur);
+  if(val===null)return;
+  for(const[k,v] of segAssign)if(v===val.toUpperCase())segAssign.delete(k);
+  if(val.trim()===''){ segAssign.delete(segId); }
+  else { segAssign.set(segId,val.toUpperCase().trim()); }
+  rebuildBodySVG();
+  // sync sidebar selects
+  sensors.forEach((_,m)=>{
+    const mk=m.replace(/:/g,'');
+    const sel=document.querySelector('#sc-'+mk+' .sc-sel');
+    if(sel)sel.value=getMacSeg(m)||'';
+  });
+  if(activeMac){
+    const as=document.getElementById('seg-assign-sel');
+    if(as)as.value=getMacSeg(activeMac)||'';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// LATENCY PANEL
+// ═══════════════════════════════════════════════════════
+const latCards=new Map();
+
+function getOrCreateLatCard(mac){
+  if(latCards.has(mac))return latCards.get(mac);
+  const s=sensors.get(mac);
+  const colorHex=s?.colorHex||0x6677ff;
+  const colorCSS='#'+colorHex.toString(16).padStart(6,'0');
+  const macKey=mac.replace(/:/g,'');
+
+  const div=document.createElement('div');
+  div.className='lat-card';
+  div.id='latcard-'+macKey;
+
+  const canvas=document.createElement('canvas');
+  canvas.width=280;canvas.height=52;
+  const ctx=canvas.getContext('2d');
+
+  div.innerHTML=`
+    <div class="lat-card-head">
+      <div class="lat-card-dot" style="background:${colorCSS}"></div>
+      <span class="lat-card-mac">${mac}</span>
+    </div>
+    <div class="lat-grid">
+      <div class="lat-metric"><div class="lat-mval" id="lc-mean-${macKey}">--</div><div class="lat-mlbl">Media ms</div></div>
+      <div class="lat-metric"><div class="lat-mval" id="lc-jit-${macKey}">--</div><div class="lat-mlbl">Jitter ms</div></div>
+      <div class="lat-metric"><div class="lat-mval" id="lc-hz-${macKey}">--</div><div class="lat-mlbl">Hz real</div></div>
+    </div>
+    <div class="lat-lost-row" id="lc-lost-${macKey}"></div>
+    <div class="lat-graph" id="lc-g-${macKey}"></div>`;
+
+  const body=document.getElementById('lat-body');
+  // Remove "no data" hint if present
+  const hint=body.querySelector('.empty-hint');
+  if(hint)hint.remove();
+  // Insert before dispersion section if it exists
+  const disp=body.querySelector('.lat-disp-section');
+  if(disp)body.insertBefore(div,disp);
+  else body.appendChild(div);
+
+  div.querySelector('.lat-graph').appendChild(canvas);
+  latCards.set(mac,{div,canvas,ctx,colorCSS});
+  return latCards.get(mac);
+}
+
+function calcStats(arr){
+  if(!arr.length)return{mean:0,std:0,min:0,max:0};
+  const mean=arr.reduce((a,b)=>a+b,0)/arr.length;
+  const std=Math.sqrt(arr.reduce((a,b)=>a+(b-mean)**2,0)/arr.length);
+  return{mean,std,min:Math.min(...arr),max:Math.max(...arr)};
+}
+function qcls(v,g,w){return v<=g?'ok':v<=w?'warn':'bad';}
+
+function drawGraph(ctx,canvas,intervals,colorCSS){
+  const W=canvas.width,H=canvas.height,MAX=60;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#0a0a12';ctx.fillRect(0,0,W,H);
+  // grid
+  ctx.strokeStyle='#181828';ctx.lineWidth=1;
+  [16.67,33,50].forEach(ms=>{
+    const y=H-(ms/MAX)*H;
+    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();
+  });
+  // target
+  ctx.strokeStyle='#1e3a1e';
+  const ty=H-(EXPECTED_MS/MAX)*H;
+  ctx.beginPath();ctx.moveTo(0,ty);ctx.lineTo(W,ty);ctx.stroke();
+  ctx.fillStyle='#1e3a1e';ctx.font='7px monospace';ctx.fillText('16.7ms',2,ty-2);
+  if(intervals.length<2)return;
+  // fill
+  const grad=ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,colorCSS+'77');grad.addColorStop(1,colorCSS+'0a');
+  ctx.beginPath();ctx.moveTo(0,H);
+  intervals.forEach((v,i)=>{
+    const x=(i/(MAX_SAMPLES-1))*W,y=H-Math.min(1,v/MAX)*H;
+    ctx.lineTo(x,y);
+  });
+  ctx.lineTo(W,H);ctx.closePath();ctx.fillStyle=grad;ctx.fill();
+  // line
+  ctx.beginPath();ctx.strokeStyle=colorCSS;ctx.lineWidth=1.5;
+  intervals.forEach((v,i)=>{
+    const x=(i/(MAX_SAMPLES-1))*W,y=H-Math.min(1,v/MAX)*H;
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+}
+
+function updateLatencyPanel(){
+  const tab=document.getElementById('tab-latency');
+  if(!tab||!tab.classList.contains('active'))return;
+
+  let allIntvls=[],totalLost=0,totalPkts=0;
+  const now=performance.now();
+
+  // Dispersion: last arrival time per sensor
+  const lastTimes=[];
+
+  sensors.forEach((s,mac)=>{
+    const macKey=mac.replace(/:/g,'');
+    const lc=getOrCreateLatCard(mac);
+    const stats=calcStats(s.latIntervals);
+
+    const setM=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+    const setCls=(id,v,g,w)=>{const el=document.getElementById(id);if(el)el.className='lat-mval '+qcls(v,g,w);};
+
+    setM('lc-mean-'+macKey, stats.mean>0?stats.mean.toFixed(1):'--');
+    setCls('lc-mean-'+macKey,stats.mean,18,35);
+    setM('lc-jit-'+macKey,  stats.std>0?stats.std.toFixed(1):'--');
+    setCls('lc-jit-'+macKey,stats.std,3,9);
+    const hzReal=stats.mean>0?(1000/stats.mean).toFixed(1):'--';
+    setM('lc-hz-'+macKey,hzReal);
+    setCls('lc-hz-'+macKey,stats.mean,18,30);
+
+    const lostEl=document.getElementById('lc-lost-'+macKey);
+    if(lostEl){
+      if(s.latLost>0){
+        const pct=((s.latLost/Math.max(1,s.latTotal))*100).toFixed(1);
+        lostEl.textContent=`⚠ ${s.latLost} paquetes perdidos est. (${pct}%)`;
+      } else {lostEl.textContent='';}
+    }
+
+    drawGraph(lc.ctx,lc.canvas,s.latIntervals,lc.colorCSS);
+    allIntvls.push(...s.latIntervals);
+    totalLost+=s.latLost; totalPkts+=s.latTotal;
+    if(s.latLastT>0&&now-s.lastPktTime<600)lastTimes.push({mac,t:s.latLastT,css:lc.colorCSS});
+  });
+
+  // Global KPIs
+  const gs=calcStats(allIntvls);
+  const setKPI=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  setKPI('lk-mean',  gs.mean>0?gs.mean.toFixed(1)+' ms':'--');
+  setKPI('lk-jitter',gs.std>0?gs.std.toFixed(1)+' ms':'--');
+  setKPI('lk-lost',  totalPkts>0?((totalLost/totalPkts)*100).toFixed(1)+'%':'--');
+
+  // Inter-node dispersion
+  if(lastTimes.length>1){
+    const tmin=Math.min(...lastTimes.map(x=>x.t));
+    const tmax=Math.max(...lastTimes.map(x=>x.t));
+    const span=tmax-tmin;
+    setKPI('lk-disp',span.toFixed(1)+' ms');
+
+    // Dispersion bar chart
+    let dispSec=document.getElementById('lat-disp-sec');
+    if(!dispSec){
+      dispSec=document.createElement('div');
+      dispSec.className='lat-disp-section';
+      dispSec.id='lat-disp-sec';
+      dispSec.innerHTML=`<div class="lat-disp-title">Dispersión inter-nodo (últimas llegadas)</div><div id="lat-disp-rows"></div>`;
+      document.getElementById('lat-body').appendChild(dispSec);
+    }
+    const rows=document.getElementById('lat-disp-rows');
+    if(rows){
+      rows.innerHTML='';
+      lastTimes.forEach(({mac,t,css})=>{
+        const offset=t-tmin;
+        const pct=span>0?Math.min(100,(offset/span)*100):0;
+        const row=document.createElement('div');
+        row.className='lat-disp-row';
+        row.innerHTML=`
+          <span class="lat-disp-mac">${mac}</span>
+          <div class="lat-disp-bar-wrap">
+            <div class="lat-disp-bar" style="left:0;width:${pct}%;background:${css};opacity:.7"></div>
+          </div>
+          <span class="lat-disp-val">${offset.toFixed(1)}ms</span>`;
+        rows.appendChild(row);
+      });
+    }
+  } else {
+    setKPI('lk-disp','--');
+  }
+}
+
+function clearLatData(){
+  sensors.forEach(s=>{s.latIntervals=[];s.latLost=0;s.latTotal=0;s.latLastT=0;});
+  ['lk-mean','lk-jitter','lk-disp','lk-lost'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.textContent='--';
+  });
+  const disp=document.getElementById('lat-disp-sec');
+  if(disp)disp.remove();
+  latCards.forEach(lc=>{
+    lc.ctx.clearRect(0,0,lc.canvas.width,lc.canvas.height);
+  });
+}
+
+setInterval(updateLatencyPanel,200);
+
+// ═══════════════════════════════════════════════════════
+// SERIAL
+// ═══════════════════════════════════════════════════════
+async function connectSerial(){
+  if(!('serial' in navigator)){
+    document.getElementById('ns1').style.display='flex';
+    return;
+  }
+  if(serialPort){disconnectSerial();return;}
+  try{
+    serialPort=await navigator.serial.requestPort();
+    const baud=1000000;
+    await serialPort.open({baudRate:baud});
+    setBadge('on','Conectado');
+    document.getElementById('btn-conn').textContent='Desconectar';
+    const dec=new TextDecoderStream();
+    serialPort.readable.pipeTo(dec.writable);
+    reader=dec.readable.getReader();
+    readLoop();
+  }catch(e){console.warn('Serial:',e.message);}
+}
+
+async function readLoop(){
+  try{
+    while(true){
+      const{value,done}=await reader.read();
+      if(done)break;
+      lineBuf+=value;
+      const lines=lineBuf.split('\n');
+      lineBuf=lines.pop();
+      lines.forEach(parseLine);
+      setBadge('rx','Recibiendo');
+    }
+  }catch(e){}
+}
+
+async function disconnectSerial(){
+  try{reader&&await reader.cancel();serialPort&&await serialPort.close();}catch(e){}
+  serialPort=null;reader=null;
+  setBadge('off','Desconectado');
+  document.getElementById('btn-conn').textContent='Conectar';
+}
+
+function parseLine(line){
+  const m=line.match(/\{([0-9A-Fa-f:]{17}),([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+)\}/);
+  if(!m)return;
+  updateSensor(m[1].toUpperCase(),parseFloat(m[2]),parseFloat(m[3]),parseFloat(m[4]),parseFloat(m[5]));
+}
+
+function setBadge(cls,txt){
+  const el=document.getElementById('badge');
+  if(el){el.className='badge '+cls;el.textContent=txt;}
+}
+
+// ═══════════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════
+function switchTab(name){
+  document.querySelectorAll('.mtab').forEach((t,i)=>{
+    const names=['sensor','ragdoll','latency'];
+    t.classList.toggle('active',names[i]===name);
+  });
+  document.querySelectorAll('.mpanel').forEach(p=>p.classList.remove('active'));
+  const panel=document.getElementById('tab-'+name);
+  if(panel)panel.classList.add('active');
+  // Trigger resize for whichever renderer is now visible
+  setTimeout(()=>{
+    if(name==='sensor'){const el=document.getElementById('vp-sensor');sRenderer.setSize(el.clientWidth,el.clientHeight);sCamera.aspect=el.clientWidth/el.clientHeight;sCamera.updateProjectionMatrix();}
+    if(name==='ragdoll'){const el=document.getElementById('vp-ragdoll');rRenderer.setSize(el.clientWidth,el.clientHeight);rCamera.aspect=el.clientWidth/el.clientHeight;rCamera.updateProjectionMatrix();}
+  },30);
+}
+
+// ═══════════════════════════════════════════════════════
+// CLEAR ALL
+// ═══════════════════════════════════════════════════════
+function clearAll(){
+  sensors.forEach(s=>{sMeshGroup.remove(s.mesh);});
+  sensors.clear(); segAssign.clear(); activeMac=null;
+  latCards.forEach(lc=>lc.div.remove()); latCards.clear();
+  jBadges.forEach(el=>el.remove()); jBadges.clear();
+  document.getElementById('sensor-list').innerHTML='<div class="empty-hint" id="empty-hint">Conecta el<br>receptor ESP32</div>';
+  document.getElementById('active-sensor-sel').innerHTML='<option value="">— Ninguno —</option>';
+  document.getElementById('lat-body').innerHTML='';
+  ['lk-mean','lk-jitter','lk-disp','lk-lost'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='--';});
+  rebuildBodySVG();
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER LOOP
+// ═══════════════════════════════════════════════════════
+function animate(){
+  requestAnimationFrame(animate);
+  const activeTab=document.querySelector('.mpanel.active')?.id;
+  if(activeTab==='tab-sensor'){
+    sRenderer.render(sScene,sCamera);
+    updateAxisLabels('axis-lbl-wrap',sCamera,'vp-sensor');
+  } else if(activeTab==='tab-ragdoll'){
+    rRenderer.render(rScene,rCamera);
+    updateAxisLabels('axis-lbl-wrap-r',rCamera,'vp-ragdoll');
+    updateJointList();
+    updateJointBadges();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+rebuildBodySVG();
+updateAxesPreview();
+if(!('serial' in navigator)){
+  document.getElementById('ns1').style.display='flex';
+  document.getElementById('btn-conn').disabled=true;
+}
+// Initial resize
+setTimeout(()=>{
+  const el=document.getElementById('vp-sensor');
+  sRenderer.setSize(el.clientWidth,el.clientHeight);
+  sCamera.aspect=el.clientWidth/el.clientHeight;
+  sCamera.updateProjectionMatrix();
+},50);
+animate();
+</script>
+</body>
+</html>
