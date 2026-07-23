@@ -1,0 +1,1655 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MoCap Web Hub ver 1.5.5</title>
+    
+    <!-- Importación de la librería Three.js para la renderización y visualización en 3D de los sensores -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- Importación de fuentes tipográficas desde Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <style>
+        /* ============================================================
+           TOKENS -- Variables globales de CSS (Custom Properties).
+           Definen la paleta de colores, tipografías y radios de borde para
+           mantener un diseño consistente (Design System) en toda la interfaz.
+        ============================================================ */
+        :root {
+            --bg: #12151b; /* Color de fondo principal oscuro */
+            --surface: #1a1e26; /* Color para las tarjetas de los sensores */
+            --surface-2: #212734;
+            --border: rgba(255,255,255,0.08);
+            --border-strong: rgba(255,255,255,0.16);
+
+            --ink: #e9edf3; /* Color principal del texto */
+            --muted: #8791a1;
+            --dim: #7a8494;
+
+            /* Colores temáticos de aviación (horizonte artificial) */
+            --sky: #4e93e8;
+            --sky-soft: rgba(78,147,232,0.14);
+            --ground: #c17d45;
+            --ground-soft: rgba(193,125,69,0.16);
+
+            /* Colores de estado semánticos */
+            --success: #3fbf7f;
+            --success-soft: rgba(63,191,127,0.14);
+            --danger: #f16c71;
+            --danger-soft: rgba(241,108,113,0.16);
+            --warning: #e3a23d;
+            --warning-soft: rgba(227,162,61,0.14);
+            --info: #4fb8c9;
+            --lock: #8b6fe8;
+
+            /* Tipografías: Display (Títulos), Body (Texto general), Mono (Datos y código) */
+            --font-display: 'Space Grotesk', system-ui, sans-serif;
+            --font-body: 'Inter', system-ui, sans-serif;
+            --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+
+            --radius: 10px;
+            --radius-sm: 6px;
+        }
+
+        * { box-sizing: border-box; } /* Asegura que el padding no expanda el tamaño de las cajas */
+
+        /* Estilos base del documento */
+        body {
+            font-family: var(--font-body);
+            background: var(--bg);
+            color: var(--ink);
+            margin: 0;
+            padding: 0 24px 48px;
+            -webkit-font-smoothing: antialiased; /* Suavizado de fuentes en WebKit */
+        }
+
+        .page { max-width: 1480px; margin: 0 auto; } /* Contenedor centralizado */
+
+        /* ---------- Encabezado ---------- */
+        /* Uso de Flexbox para alinear el título y los botones de acción superior */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            gap: 16px;
+            padding: 28px 0 18px;
+            margin-bottom: 30px;
+            position: relative;
+            border-bottom: 1px solid var(--border);
+        }
+        /* Decoración inferior del header usando un gradiente */
+        .header::after {
+            content: "";
+            position: absolute;
+            left: 0; right: 0; bottom: -1px;
+            height: 2px;
+            background: linear-gradient(90deg, var(--sky) 0%, rgba(255,255,255,0.05) 50%, var(--ground) 100%);
+        }
+        .header h1 {
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 25px;
+            letter-spacing: -0.01em;
+            margin: 0 0 6px;
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+        }
+        .header .version { font-family: var(--font-mono); font-size: 12px; font-weight: 400; color: var(--dim); }
+        .header .subtitle { font-size: 13px; color: var(--muted); margin: 0; }
+        .header-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+        /* ---------- Botones ---------- */
+        /* Estilos genéricos e interactivos para botones (hover, active, focus) */
+        button {
+            font-family: var(--font-body);
+            padding: 10px 18px;
+            background: var(--sky);
+            color: #0b0f14;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            transition: background 0.15s ease, transform 0.1s ease;
+        }
+        button:hover { background: #6ba8ef; }
+        button:active { transform: scale(0.97); } /* Efecto de "presionado" */
+        
+        /* Variantes de color de los botones */
+        .btn-success { background: var(--success); color: #06210f; }
+        .btn-success:hover { background: #57d093; }
+        .btn-danger { background: var(--danger); color: #2a0709; }
+        .btn-danger:hover { background: #ea6368; }
+        .btn-warning { background: var(--warning); color: #241300; }
+        .btn-warning:hover { background: #edb35c; }
+        .btn-info { background: var(--info); color: #04181b; }
+        .btn-info:hover { background: #6fcada; }
+        .btn-secondary { background: var(--surface-2); color: var(--ink); border: 1px solid var(--border-strong); }
+        .btn-secondary:hover { background: #2a3040; }
+
+        /* Accesibilidad: Delineado para navegación por teclado */
+        button:focus-visible, select:focus-visible, .lock-toggle:focus-visible {
+            outline: 2px solid var(--sky);
+            outline-offset: 2px;
+        }
+        /* Accesibilidad: Reducción de movimiento si el sistema operativo lo solicita */
+        @media (prefers-reduced-motion: reduce) {
+            button, .lock-toggle { transition: none !important; }
+            button:active { transform: none; }
+        }
+
+        /* ---------- Secciones ---------- */
+        .section-eyebrow {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: var(--font-display);
+            font-size: 12.5px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin: 0 0 14px;
+        }
+        .section-eyebrow .count {
+            font-family: var(--font-mono);
+            background: var(--surface-2);
+            color: var(--ink);
+            padding: 1px 9px;
+            border-radius: 20px;
+            font-size: 12px;
+            letter-spacing: normal;
+            text-transform: none;
+        }
+
+        /* Sistema de Grid (cuadrícula) dinámico que se adapta al ancho de pantalla */
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; margin-bottom: 38px; }
+
+        /* ---------- Tarjeta de sensor ---------- */
+        .card {
+            position: relative;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px;
+            overflow: hidden;
+        }
+        .card::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--sky), rgba(255,255,255,0.05) 50%, var(--ground));
+        }
+        .card h3 {
+            font-family: var(--font-display);
+            font-size: 15px;
+            font-weight: 600;
+            margin: 2px 0 14px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .card .mac { color: var(--muted); font-family: var(--font-mono); font-size: 12.5px; font-weight: 400; }
+        .card .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+        .card .controls button { width: 100%; padding: 8px 10px; font-size: 12px; }
+        .field-label { display: block; font-size: 10.5px; color: var(--dim); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+
+        /* ---------- LED de estado ---------- */
+        /* Indicador visual intermitente de que se están recibiendo datos */
+        .status-led { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+        .status-led.on { background: var(--success); box-shadow: 0 0 8px var(--success); }
+        .status-led.off { background: var(--dim); }
+
+        /* ---------- Badge (parte del cuerpo asignada) ---------- */
+        .badge {
+            background: var(--sky-soft);
+            color: var(--sky);
+            border: 1px solid rgba(78,147,232,0.35);
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 500;
+            margin-left: auto;
+        }
+
+        /* ---------- Selects ---------- */
+        select {
+            background: var(--surface-2);
+            color: var(--ink);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-sm);
+            padding: 8px;
+            width: 100%;
+            font-family: var(--font-body);
+            font-size: 12.5px;
+        }
+
+        /* ---------- Subsecciones (mapeo de ejes, bloqueos) ---------- */
+        .subsection { background: var(--surface-2); border: 1px solid var(--border); padding: 10px 10px 8px; border-radius: var(--radius-sm); margin: 10px 0; }
+        .subsection-title {
+            font-family: var(--font-display);
+            font-size: 10.5px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--muted);
+            display: block;
+            margin-bottom: 9px;
+        }
+        .axis-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; font-size: 12px; }
+
+        /* ---------- Bloqueos de ejes ---------- */
+        /* Controles para congelar movimientos específicos en el espacio 3D */
+        .lock-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+        .lock-row-label { font-size: 11px; color: var(--ground); font-weight: 500; min-width: 52px; }
+        .lock-group { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+        .lock-toggle {
+            font-family: var(--font-mono);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 3px 10px;
+            border: none;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+        }
+        .lock-toggle.locked { background: var(--danger-soft); color: var(--danger); box-shadow: inset 0 0 0 1px rgba(241,108,113,0.4); }
+        .lock-toggle.unlocked { background: var(--success-soft); color: var(--success); box-shadow: inset 0 0 0 1px rgba(63,191,127,0.35); }
+        .lock-toggle:hover { filter: brightness(1.2); }
+        /* Selector por atributo (no por clase) para que el estilo del botón "TODO"
+           sobreviva a los cambios de className que hace toggleLock() */
+        .lock-toggle[id*="posAll"], .lock-toggle[id*="rotAll"] { font-weight: 700; padding-inline: 11px; }
+        .lock-status-line { font-size: 11px; color: var(--dim); margin-top: 8px; }
+
+        /* ---------- Chips de estado (Hz, calibración, temperatura, interferencia) ---------- */
+        .status-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+        .status-chip {
+            font-size: 11.5px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            padding: 3px 10px;
+            border-radius: 20px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+        }
+        .status-chip strong { font-family: var(--font-mono); }
+
+        /* ---------- Lecturas de telemetría ---------- */
+        .quaternion-display, .position-display {
+            font-family: var(--font-mono);
+            font-size: 12.5px;
+            padding: 9px 10px;
+            background: #0d0f13;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+        }
+        .quaternion-display { color: var(--sky); display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 8px; }
+        .quaternion-display .axis-label { color: var(--dim); margin-right: 3px; }
+        .position-display { color: var(--ground); margin-top: 6px; }
+
+        /* ---------- Viewport 3D ---------- */
+        .canvas-container {
+            width: 100%;
+            height: 200px;
+            margin: 10px 0;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            background: radial-gradient(ellipse at 50% 40%, #1c212b 0%, #12151b 100%);
+            border: 1px solid var(--border);
+        }
+
+        /* ---------- Monitor crudo ---------- */
+        .raw-data {
+            background: #0a0c0f;
+            border: 1px solid var(--border);
+            padding: 12px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            height: 160px;
+            overflow-y: auto;
+            color: #6fe38a; /* Verde estilo consola hacker */
+            border-radius: var(--radius);
+        }
+
+        /* Diseño responsivo para pantallas móviles */
+        @media (max-width: 640px) {
+            body { padding: 0 14px 36px; }
+            .header { align-items: flex-start; }
+            .card .controls { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<!-- Contenedor principal de la aplicación -->
+<div class="page">
+
+    <!-- Encabezado de la interfaz con títulos y botones de acción principal -->
+    <div class="header">
+        <div>
+            <h1>MoCap Web Hub <span class="version">ver 1.5.5</span></h1>
+            <p class="subtitle">Captura de movimiento inalámbrica · sensores IMU vía puerto serie</p>
+        </div>
+        <div class="header-actions">
+            <!-- Botón para descargar el registro de lecturas a un archivo .CSV -->
+            <button id="exportCsvBtn" class="btn-success">📊 Exportar CSV</button>
+            <!-- Botón que invoca la API Web Serial para conectar un microcontrolador/sensor -->
+            <button id="connectBtn">🔌 Conectar puerto serial</button>
+        </div>
+    </div>
+
+    <!-- Sección de sensores dinámicos. Aquí se inyectarán por JS las tarjetas individuales -->
+    <p class="section-eyebrow">🛰️ Sensores activos <span class="count" id="sensorCount">(0)</span></p>
+    <div id="sensorsContainer" class="dashboard"></div>
+
+    <!-- Consola tipo terminal para ver los datos crudos JSON/CVS que entran por el serial -->
+    <p class="section-eyebrow">📟 Monitor crudo</p>
+    <div id="rawConsole" class="raw-data">Esperando conexión...</div>
+
+</div>
+
+<script>
+// ============================================================
+// 1. FILTRO MADGWICK MEJORADO CON BETA DINÁMICO
+// ============================================================
+/* 
+   El Filtro Madgwick es un algoritmo matemático ligero diseñado para estimar 
+   la orientación espacial (en cuaterniones) fusionando datos de giroscopios, 
+   acelerómetros y magnetómetros (IMU).
+*/
+class Madgwick {
+    constructor(beta = 0.1, dynamicBeta = true) {
+        this.beta = beta; // Factor de ganancia (confianza en acelerómetro/magnetómetro frente al giroscopio)
+        this.dynamicBeta = dynamicBeta;
+        this.motionLevel = 0;
+        this.alpha = 0.9;
+        
+        // Estado del cuaternión (inicia en identidad)
+        this.q0 = 1.0; 
+        this.q1 = 0.0;
+        this.q2 = 0.0;
+        this.q3 = 0.0;
+        this.lastMotionMagnitude = 0;
+    }
+
+    // Calcula de forma dinámica el valor de "Beta".
+    // Aumenta la ganancia cuando el dispositivo está en reposo (para corregir rápido)
+    // y la reduce durante movimientos rápidos (para ignorar aceleraciones lineales falsas).
+    updateBeta(motionMagnitude) {
+        if (!this.dynamicBeta) return;
+        this.motionLevel = this.alpha * this.motionLevel + (1 - this.alpha) * motionMagnitude;
+        const normalizedMotion = Math.min(this.motionLevel / 15, 1);
+        const targetBeta = 0.08 + (0.35 * (1 - normalizedMotion));
+        this.beta = this.alpha * this.beta + (1 - this.alpha) * targetBeta;
+        this.beta = Math.max(0.05, Math.min(0.5, this.beta));
+    }
+
+    // Actualización de 9 grados de libertad (9DoF: Acelerómetro + Giroscopio + Magnetómetro)
+    // Se usa cuando se quiere corrección de orientación absoluta respecto al norte magnético.
+    update9DoF(gx, gy, gz, ax, ay, az, mx, my, mz, dt) {
+        const motionMagnitude = Math.sqrt(ax*ax + ay*ay + az*az);
+        this.updateBeta(motionMagnitude);
+
+        let q1 = this.q0, q2 = this.q1, q3 = this.q2, q4 = this.q3;
+        let norm;
+        let hx, hy, hz, bx, bz;
+        let vx, vy, vz, wx, wy, wz;
+        let ex, ey, ez;
+        let pa, pb, pc;
+
+        // Convertir grados por segundo a radianes por segundo
+        gx *= (Math.PI / 180.0);
+        gy *= (Math.PI / 180.0);
+        gz *= (Math.PI / 180.0);
+
+        // Prevenir divisiones por cero validando que existan lecturas
+        if (!((ax === 0.0) && (ay === 0.0) && (az === 0.0)) && !((mx === 0.0) && (my === 0.0) && (mz === 0.0))) {
+            
+            // Normalizar vectores de aceleración y magnetismo
+            norm = 1.0 / Math.sqrt(ax * ax + ay * ay + az * az);
+            ax *= norm; ay *= norm; az *= norm;
+
+            norm = 1.0 / Math.sqrt(mx * mx + my * my + mz * mz);
+            mx *= norm; my *= norm; mz *= norm;
+
+            // Variables precalculadas para optimizar las matemáticas del filtro
+            let q1q1 = q1 * q1, q1q2 = q1 * q2, q1q3 = q1 * q3, q1q4 = q1 * q4;
+            let q2q2 = q2 * q2, q2q3 = q2 * q3, q2q4 = q2 * q4;
+            let q3q3 = q3 * q3, q3q4 = q3 * q4;
+            let q4q4 = q4 * q4;
+
+            // Cálculos para determinar la dirección del campo magnético terrestre (flujo magnético)
+            hx = 2.0 * mx * (0.5 - q3q3 - q4q4) + 2.0 * my * (q2q3 - q1q4) + 2.0 * mz * (q2q4 + q1q3);
+            hy = 2.0 * mx * (q2q3 + q1q4) + 2.0 * my * (0.5 - q2q2 - q4q4) + 2.0 * mz * (q3q4 - q1q2);
+            hz = 2.0 * mx * (q2q4 - q1q3) + 2.0 * my * (q3q4 + q1q2) + 2.0 * mz * (0.5 - q2q2 - q3q3);
+            bx = Math.sqrt((hx * hx) + (hy * hy));
+            bz = hz;
+
+            // Estimación de la dirección de la gravedad y campo magnético
+            vx = 2.0 * (q2q4 - q1q3);
+            vy = 2.0 * (q1q2 + q3q4);
+            vz = q1q1 - q2q2 - q3q3 + q4q4;
+            wx = 2.0 * bx * (0.5 - q3q3 - q4q4) + 2.0 * bz * (q2q4 - q1q3);
+            wy = 2.0 * bx * (q2q3 - q1q4) + 2.0 * bz * (q1q2 + q3q4);
+            wz = 2.0 * bx * (q1q3 + q2q4) + 2.0 * bz * (0.5 - q2q2 - q3q3);
+
+            // Error de orientación estimado mediante producto cruz
+            ex = (ay * vz - az * vy) + (my * wz - mz * wy);
+            ey = (az * vx - ax * vz) + (mz * wx - mx * wz);
+            ez = (ax * vy - ay * vx) + (mx * wy - my * wx);
+
+            // Aplicar retroalimentación (Beta) a los giroscopios
+            gx += this.beta * ex;
+            gy += this.beta * ey;
+            gz += this.beta * ez;
+        }
+
+        // Integración de la tasa de cambio de orientación (cuaternión derivado)
+        pa = q2; pb = q3; pc = q4;
+        q1 = q1 + (-pa * gx - pb * gy - pc * gz) * (0.5 * dt);
+        q2 = pa + (q1 * gx + pb * gz - pc * gy) * (0.5 * dt);
+        q3 = pb + (q1 * gy - pa * gz + pc * gx) * (0.5 * dt);
+        q4 = pc + (q1 * gz + pa * gy - pb * gx) * (0.5 * dt);
+
+        // Normalizar el cuaternión resultante para que la magnitud siga siendo 1
+        norm = 1.0 / Math.sqrt(q1 * q1 + q2 * q2 + q3 * q3 + q4 * q4);
+        this.q0 = q1 * norm;
+        this.q1 = q2 * norm;
+        this.q2 = q3 * norm;
+        this.q3 = q4 * norm;
+    }
+
+    // Actualización de 6 grados de libertad (6DoF: Acelerómetro + Giroscopio)
+    // Se usa cuando se ignora el magnetómetro (para evadir interferencias magnéticas)
+    update6DoF(gx, gy, gz, ax, ay, az, dt) {
+        const motionMagnitude = Math.sqrt(ax*ax + ay*ay + az*az);
+        this.updateBeta(motionMagnitude);
+
+        let recipNorm;
+        let s0, s1, s2, s3;
+        let qDot1, qDot2, qDot3, qDot4;
+        let _2q0, _2q1, _2q2, _2q3, _4q0, _4q1, _4q2 ,_8q1, _8q2, q0q0, q1q1, q2q2, q3q3;
+
+        gx *= (Math.PI / 180.0);
+        gy *= (Math.PI / 180.0);
+        gz *= (Math.PI / 180.0);
+
+        qDot1 = 0.5 * (-this.q1 * gx - this.q2 * gy - this.q3 * gz);
+        qDot2 = 0.5 * (this.q0 * gx + this.q2 * gz - this.q3 * gy);
+        qDot3 = 0.5 * (this.q0 * gy - this.q1 * gz + this.q3 * gx);
+        qDot4 = 0.5 * (this.q0 * gz + this.q1 * gy - this.q2 * gx);
+
+        if(!((ax === 0.0) && (ay === 0.0) && (az === 0.0))) {
+            recipNorm = 1.0 / Math.sqrt(ax * ax + ay * ay + az * az);
+            ax *= recipNorm; ay *= recipNorm; az *= recipNorm;
+
+            _2q0 = 2.0 * this.q0; _2q1 = 2.0 * this.q1; _2q2 = 2.0 * this.q2; _2q3 = 2.0 * this.q3;
+            _4q0 = 4.0 * this.q0; _4q1 = 4.0 * this.q1; _4q2 = 4.0 * this.q2;
+            _8q1 = 8.0 * this.q1; _8q2 = 8.0 * this.q2;
+            q0q0 = this.q0 * this.q0; q1q1 = this.q1 * this.q1; q2q2 = this.q2 * this.q2; q3q3 = this.q3 * this.q3;
+
+            // Algoritmo de descenso de gradiente para el acelerómetro
+            s0 = _4q0 * q2q2 + _2q2 * ax + _4q0 * q1q1 - _2q1 * ay;
+            s1 = _4q1 * q3q3 - _2q3 * ax + 4.0 * q0q0 * this.q1 - _2q0 * ay - _4q1 + _8q1 * q1q1 + _8q1 * q2q2 + _4q1 * az;
+            s2 = 4.0 * q0q0 * this.q2 + _2q0 * ax + _4q2 * q3q3 - _2q3 * ay - _4q2 + _8q2 * q1q1 + _8q2 * q2q2 + _4q2 * az;
+            s3 = 4.0 * q1q1 * this.q3 - _2q1 * ax + 4.0 * q2q2 * this.q3 - _2q2 * ay;
+            
+            recipNorm = 1.0 / Math.sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
+            s0 *= recipNorm; s1 *= recipNorm; s2 *= recipNorm; s3 *= recipNorm;
+
+            qDot1 -= this.beta * s0; qDot2 -= this.beta * s1; qDot3 -= this.beta * s2; qDot4 -= this.beta * s3;
+        }
+
+        this.q0 += qDot1 * dt;
+        this.q1 += qDot2 * dt;
+        this.q2 += qDot3 * dt;
+        this.q3 += qDot4 * dt;
+
+        recipNorm = 1.0 / Math.sqrt(this.q0 * this.q0 + this.q1 * this.q1 + this.q2 * this.q2 + this.q3 * this.q3);
+        this.q0 *= recipNorm; this.q1 *= recipNorm; this.q2 *= recipNorm; this.q3 *= recipNorm;
+    }
+
+    getQuaternion() {
+        return { w: this.q0, x: this.q1, y: this.q2, z: this.q3 };
+    }
+}
+
+// ============================================================
+// 2. VARIABLES GLOBALES Y ESTRUCTURA DE ESTADO
+// ============================================================
+let port; // Objeto del puerto serial
+let reader; // Lector de streams seriales
+const sensorsData = {}; // Almacena toda la metadata, física y estado de cada sensor (clave = MAC)
+const sensorsHzCounter = {}; // Usado para calcular las tasas de refresco por segundo
+const allRawData = []; // Buffer para la exportación a CSV
+let totalSensors = 0;
+
+// Referencias a nodos en el DOM
+const connectBtn = document.getElementById('connectBtn');
+const rawConsole = document.getElementById('rawConsole');
+const sensorsContainer = document.getElementById('sensorsContainer');
+const sensorCountEl = document.getElementById('sensorCount');
+
+// Lista estática para asignar los sensores al cuerpo (ej: traje MoCap)
+const bodyPartsList = [
+    "Sin Asignar", "Cabeza", "Pecho", "Cadera", 
+    "Hombro Derecho", "Brazo Derecho", "Antebrazo Derecho", "Mano Derecha", 
+    "Hombro Izquierdo", "Brazo Izquierdo", "Antebrazo Izquierdo", "Mano Izquierda", 
+    "Muslo Derecho", "Pierna Derecha", "Pie Derecho", 
+    "Muslo Izquierdo", "Pierna Izquierda", "Pie Izquierdo"
+];
+
+// Almacena instancias de Three.js correspondientes a cada sensor
+const sensors3D = {};
+
+// ============================================================
+// 3. FUNCIONES DE CALIBRACIÓN Y PROCESAMIENTO FÍSICO
+// ============================================================
+
+// Calibración inicial del sesgo (error inherente) del giroscopio.
+// Promedia las lecturas estando el dispositivo quieto.
+function calibrateGyroBias(mac, gx, gy, gz) {
+    const sensor = sensorsData[mac];
+    if (!sensor || !sensor.isCalibratingGyro) return;
+
+    sensor.gyroBias.x += gx;
+    sensor.gyroBias.y += gy;
+    sensor.gyroBias.z += gz;
+    sensor.gyroSamples++;
+
+    // Toma 150 muestras para estabilizar el promedio
+    if (sensor.gyroSamples >= 150) {
+        sensor.gyroBias.x /= sensor.gyroSamples;
+        sensor.gyroBias.y /= sensor.gyroSamples;
+        sensor.gyroBias.z /= sensor.gyroSamples;
+        sensor.isCalibratingGyro = false;
+        sensor.refTemperature = sensor.temperature; // referencia para medir deriva por temperatura
+        
+        const cleanMac = mac.replace(/:/g, '');
+        const statusEl = document.getElementById(`cal-status-${cleanMac}`);
+        if (statusEl) {
+            statusEl.innerHTML = '✅ Giroscopio calibrado';
+            statusEl.style.color = 'var(--success)';
+        }
+        
+        console.log(`[Calibración] Giroscopio ${mac}:`, sensor.gyroBias);
+        rawConsole.innerHTML += `<div style="color: var(--success);">✅ Giroscopio calibrado para ${mac}</div>`;
+        rawConsole.scrollTop = rawConsole.scrollHeight;
+    }
+}
+
+// Algoritmo ZUPT (Zero Velocity Update).
+// Mitiga enormemente la "deriva infinita" generada por la doble integración de la aceleración.
+// Si el sensor no se mueve físicamente, se fuerza matemáticamente la velocidad a cero.
+function detectZeroVelocity(sensor, ax, ay, az, gx, gy, gz) {
+    const accelMag = Math.sqrt(ax*ax + ay*ay + az*az);
+    const gyroMag = Math.sqrt(gx*gx + gy*gy + gz*gz);
+    
+    // Márgenes teóricos de ruido para considerar reposo absoluto
+    const ACCEL_THRESHOLD = 9.81; // Gravedad terrestre en m/s^2
+    const GYRO_THRESHOLD = 1.0;
+    
+    const isStationary = (accelMag > ACCEL_THRESHOLD - 0.8 && 
+                         accelMag < ACCEL_THRESHOLD + 0.8) && 
+                         gyroMag < GYRO_THRESHOLD;
+    
+    if (isStationary) {
+        sensor.zuptCounter = (sensor.zuptCounter || 0) + 1;
+
+        // Si está quieto, cualquier lectura en el giroscopio es un nuevo "sesgo" debido a
+        // cambios de temperatura. Se absorbe dinámicamente.
+        if (sensor.zuptCounter > 20) {
+            const biasAlpha = 0.002;
+            const locks = sensor.locks || {};
+            // Evitar reescribir ejes bloqueados por el usuario
+            if (!locks.rotX && !locks.rotAll) sensor.gyroBias.x += gx * biasAlpha;
+            if (!locks.rotY && !locks.rotAll) sensor.gyroBias.y += gy * biasAlpha;
+            if (!locks.rotZ && !locks.rotAll) sensor.gyroBias.z += gz * biasAlpha;
+        }
+
+        // Si lleva mucho rato quieto, comienza a drenar (dampen) la velocidad y aceleración falsas.
+        if (sensor.zuptCounter > 15) {
+            sensor.velocity.x *= 0.92;
+            sensor.velocity.y *= 0.92;
+            sensor.velocity.z *= 0.92;
+            
+            if (!sensor.accelBias) {
+                sensor.accelBias = { x: 0, y: 0, z: 0 };
+            }
+            const alpha = 0.02;
+            sensor.accelBias.x = sensor.accelBias.x * (1 - alpha) + ax * alpha;
+            sensor.accelBias.y = sensor.accelBias.y * (1 - alpha) + ay * alpha;
+            sensor.accelBias.z = sensor.accelBias.z * (1 - alpha) + (az - 9.81) * alpha;
+            
+            // Si está permanentemente quieto, retornar al centro gradualmente (tara suave)
+            if (sensor.zuptCounter > 100) {
+                sensor.position.x *= 0.998;
+                sensor.position.y *= 0.998;
+                sensor.position.z *= 0.998;
+            }
+        }
+    } else {
+        sensor.zuptCounter = 0; // Rompe el estado ZUPT, el sensor está en movimiento.
+    }
+    
+    return isStationary;
+}
+
+// Integradora cinemática: Aceleración -> Velocidad -> Posición.
+function processPosition(sensor, aLinX, aLinY, aLinZ, dt) {
+    if (sensor.accelBias) {
+        aLinX -= sensor.accelBias.x;
+        aLinY -= sensor.accelBias.y;
+        aLinZ -= sensor.accelBias.z;
+    }
+    
+    // Enforcer las reglas UI de "bloqueo" definidas por el usuario.
+    // Ej: Si el usuario bloqueó el movimiento en 'X', forzamos ax = 0.
+    if (sensor.locks && sensor.locks.posX) aLinX = 0;
+    if (sensor.locks && sensor.locks.posY) aLinY = 0;
+    if (sensor.locks && sensor.locks.posZ) aLinZ = 0;
+    if (sensor.locks && sensor.locks.posAll) {
+        aLinX = 0; aLinY = 0; aLinZ = 0;
+    }
+    
+    // Zona muerta (Deadzone): descarta pequeñas fluctuaciones en la aceleración (ruido blanco).
+    const noiseThreshold = 0.15;
+    const deadzone = noiseThreshold * (1 + Math.abs(sensor.velocity.x) * 0.05);
+    
+    if (Math.abs(aLinX) < deadzone) aLinX = 0;
+    if (Math.abs(aLinY) < deadzone) aLinY = 0;
+    if (Math.abs(aLinZ) < deadzone) aLinZ = 0;
+    
+    // Aplicación de un Filtro Pasa Bajos simple. Suaviza picos en la aceleración.
+    const alpha = 0.6;
+    if (!sensor.filteredAccel) {
+        sensor.filteredAccel = { x: 0, y: 0, z: 0 };
+    }
+    sensor.filteredAccel.x = sensor.filteredAccel.x * alpha + aLinX * (1 - alpha);
+    sensor.filteredAccel.y = sensor.filteredAccel.y * alpha + aLinY * (1 - alpha);
+    sensor.filteredAccel.z = sensor.filteredAccel.z * alpha + aLinZ * (1 - alpha);
+    
+    const scale = 1.0;
+
+    // Fricción artificial / Dampening. Pierde velocidad con el tiempo para evitar que siga desplazándose "en el espacio".
+    const dampingFactor = sensor.zuptCounter > 10 ? 0.99 : 0.95;
+    
+    // 1ra Integración: Velocidad (V = Vo + a*t)
+    sensor.velocity.x = (sensor.velocity.x + (sensor.filteredAccel.x * scale * dt)) * dampingFactor;
+    sensor.velocity.y = (sensor.velocity.y + (sensor.filteredAccel.y * scale * dt)) * dampingFactor;
+    sensor.velocity.z = (sensor.velocity.z + (sensor.filteredAccel.z * scale * dt)) * dampingFactor;
+    
+    // Restricciones finales de velocidad por bloqueos de UI
+    if (sensor.locks && sensor.locks.posX) sensor.velocity.x = 0;
+    if (sensor.locks && sensor.locks.posY) sensor.velocity.y = 0;
+    if (sensor.locks && sensor.locks.posZ) sensor.velocity.z = 0;
+    if (sensor.locks && sensor.locks.posAll) {
+        sensor.velocity.x = 0; sensor.velocity.y = 0; sensor.velocity.z = 0;
+    }
+    
+    // Recorte / Clamping para que la visualización no "estalle" (MAX 2.5 m/s)
+    const MAX_VELOCITY = 2.5;
+    sensor.velocity.x = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, sensor.velocity.x));
+    sensor.velocity.y = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, sensor.velocity.y));
+    sensor.velocity.z = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, sensor.velocity.z));
+    
+    // 2da Integración: Posición (P = Po + V*t)
+    sensor.position.x += sensor.velocity.x * dt;
+    sensor.position.y += sensor.velocity.y * dt;
+    sensor.position.z += sensor.velocity.z * dt;
+    
+    // Restricciones finales de posición por bloqueos de UI
+    if (sensor.locks && sensor.locks.posX) sensor.position.x = 0;
+    if (sensor.locks && sensor.locks.posY) sensor.position.y = 0;
+    if (sensor.locks && sensor.locks.posZ) sensor.position.z = 0;
+    if (sensor.locks && sensor.locks.posAll) {
+        sensor.position.x = 0; sensor.position.y = 0; sensor.position.z = 0;
+    }
+    
+    // Caja delimitadora de movimiento (Bounding Box: 5 metros)
+    const MAX_POSITION = 5.0;
+    sensor.position.x = Math.max(-MAX_POSITION, Math.min(MAX_POSITION, sensor.position.x));
+    sensor.position.y = Math.max(-MAX_POSITION, Math.min(MAX_POSITION, sensor.position.y));
+    sensor.position.z = Math.max(-MAX_POSITION, Math.min(MAX_POSITION, sensor.position.z));
+}
+
+// Utilidad para transponer ejes según la orientación en que se montó el hardware
+function mapSensorAxis(x, y, z, mapValue) {
+    switch(mapValue) {
+        case 'x': return x; case '-x': return -x;
+        case 'y': return y; case '-y': return -y;
+        case 'z': return z; case '-z': return -z;
+        default: return 0;
+    }
+}
+
+// Procesa el magnetómetro, evalúa y aplica su calibración (Hard/Soft iron biases).
+function processMagnetometer(sensor, mx, my, mz) {
+    let cal = sensor.magCal;
+    // Si está en fase de calibración, solo busca máximos y mínimos (algoritmo min/max)
+    if (cal.calibrating) {
+        cal.min.x = Math.min(cal.min.x, mx); cal.max.x = Math.max(cal.max.x, mx);
+        cal.min.y = Math.min(cal.min.y, my); cal.max.y = Math.max(cal.max.y, my);
+        cal.min.z = Math.min(cal.min.z, mz); cal.max.z = Math.max(cal.max.z, mz);
+        return { x: mx, y: my, z: mz, disturbed: false };
+    }
+    
+    // Aplica matriz de compensación (offset y escala)
+    let correctedX = (mx - cal.offset.x) / cal.scale.x;
+    let correctedY = (my - cal.offset.y) / cal.scale.y;
+    let correctedZ = (mz - cal.offset.z) / cal.scale.z;
+
+    // Detecta interferencia magnética transitoria comparando la magnitud del vector.
+    // Si la magnitud se deforma por objetos de metal cercanos, lo marcamos como "disturbed".
+    const mag = Math.sqrt(correctedX * correctedX + correctedY * correctedY + correctedZ * correctedZ);
+    const ratio = mag / cal.expectedMag;
+    const disturbed = !isFinite(ratio) || ratio < 0.75 || ratio > 1.3;
+
+    if (!disturbed) {
+        cal.expectedMag = cal.expectedMag * 0.995 + mag * 0.005; // Ajuste lento a entornos nuevos
+    }
+
+    return { x: correctedX, y: correctedY, z: correctedZ, disturbed };
+}
+
+// ============================================================
+// 4. PARSER DE PAQUETES (CORE)
+// ============================================================
+// Función crítica: Recibe la trama serial (ej: {MAC,Time,Ax,Ay,Az,...})
+function processPacket(packetStr) {
+    const cleanStr = packetStr.slice(1, -1); // Elimina llaves inicial/final
+    const parts = cleanStr.split(',');
+
+    // Verifica la longitud exacta del paquete (12 campos)
+    if (parts.length === 12) {
+        const mac = parts[0];
+        const currentTimestamp = parseInt(parts[1]);
+        
+        // Si este MAC no existía, inicializa toda su estructura de memoria
+        if (!sensorsData[mac]) {
+            sensorsData[mac] = {
+                mac: mac,
+                filter: new Madgwick(0.12, true),
+                quat: { w: 1, x: 0, y: 0, z: 0 },
+                position: { x: 0, y: 0, z: 0 },
+                velocity: { x: 0, y: 0, z: 0 },
+                offsetQuat: new THREE.Quaternion(0, 0, 0, 1),
+                axisMap: { x: 'x', y: 'y', z: 'z' },
+                use9DoF: false,
+                lastTimestamp: currentTimestamp,
+                lastUpdateMs: Date.now(),
+                gyroBias: { x: 0, y: 0, z: 0 },
+                gyroSamples: 0,
+                isCalibratingGyro: true,
+                accelBias: null,
+                filteredAccel: null,
+                zuptCounter: 0,
+                // Estructura de booleanos para bloquear ejes individualmente
+                locks: {
+                    posX: false, posY: false, posZ: false, posAll: false,
+                    rotX: false, rotY: false, rotZ: false, rotAll: false
+                },
+                magCal: {
+                    calibrating: false,
+                    min: { x: 10000, y: 10000, z: 10000 },
+                    max: { x: -10000, y: -10000, z: -10000 },
+                    offset: { x: 0, y: 0, z: 0 },
+                    scale: { x: 1, y: 1, z: 1 },
+                    expectedMag: 1
+                },
+                temperature: null,
+                refTemperature: null
+            };
+            sensorsData[mac].assignedPart = "Sin Asignar";
+            // Genera la UI para este nuevo sensor
+            createSensorCard(mac);
+            add3DModelForSensor(mac);
+            totalSensors++;
+            sensorCountEl.textContent = `(${totalSensors})`;
+            return;
+        }
+
+        const sensor = sensorsData[mac];
+
+        // Cálculo de Delta Time (tiempo transcurrido entre este paquete y el anterior)
+        let dt = (currentTimestamp - sensor.lastTimestamp) / 1000.0;
+        if (dt <= 0 || dt > 1.0) { dt = 0.016; } // Evita deltas corruptos (asume 60fps)
+        sensor.lastTimestamp = currentTimestamp;
+        sensor.lastUpdateMs = Date.now();
+
+        // Parsea campos numéricos
+        const rawAx = parseFloat(parts[2]), rawAy = parseFloat(parts[3]), rawAz = parseFloat(parts[4]);
+        const rawGx = parseFloat(parts[5]), rawGy = parseFloat(parts[6]), rawGz = parseFloat(parts[7]);
+        const rawMx = parseFloat(parts[8]), rawMy = parseFloat(parts[9]), rawMz = parseFloat(parts[10]);
+
+        // Manejo de temperatura del IMU
+        const rawTemp = parseFloat(parts[11]);
+        if (!Number.isNaN(rawTemp)) {
+            sensor.temperature = (sensor.temperature === null) ? rawTemp : (sensor.temperature * 0.9 + rawTemp * 0.1);
+            if (sensor.refTemperature === null) sensor.refTemperature = sensor.temperature;
+        }
+
+        // Aplica matriz de mapeo definida en la UI
+        const ax = mapSensorAxis(rawAx, rawAy, rawAz, sensor.axisMap.x);
+        const ay = mapSensorAxis(rawAx, rawAy, rawAz, sensor.axisMap.y);
+        const az = mapSensorAxis(rawAx, rawAy, rawAz, sensor.axisMap.z);
+
+        let gx = mapSensorAxis(rawGx, rawGy, rawGz, sensor.axisMap.x);
+        let gy = mapSensorAxis(rawGx, rawGy, rawGz, sensor.axisMap.y);
+        let gz = mapSensorAxis(rawGx, rawGy, rawGz, sensor.axisMap.z);
+
+        const mx = mapSensorAxis(rawMx, rawMy, rawMz, sensor.axisMap.x);
+        const my = mapSensorAxis(rawMx, rawMy, rawMz, sensor.axisMap.y);
+        const mz = mapSensorAxis(rawMx, rawMy, rawMz, sensor.axisMap.z);
+
+        // Bloquea calibración continua
+        if (sensor.isCalibratingGyro) {
+            calibrateGyroBias(mac, gx, gy, gz);
+            return;
+        }
+
+        // Restricciones de rotación UI
+        if (sensor.locks && sensor.locks.rotX) gx = 0;
+        if (sensor.locks && sensor.locks.rotY) gy = 0;
+        if (sensor.locks && sensor.locks.rotZ) gz = 0;
+        if (sensor.locks && sensor.locks.rotAll) {
+            gx = 0; gy = 0; gz = 0;
+        }
+
+        // Se resta el error estimado del giroscopio
+        gx -= sensor.gyroBias.x;
+        gy -= sensor.gyroBias.y;
+        gz -= sensor.gyroBias.z;
+
+        const magCorrected = processMagnetometer(sensor, mx, my, mz);
+        sensor.magDisturbed = magCorrected.disturbed;
+
+        // Selección dinámica entre 9DoF o 6DoF según configuración del usuario e interferencias
+        if (sensor.use9DoF && !magCorrected.disturbed) {
+            sensor.filter.update9DoF(gx, gy, gz, ax, ay, az, 
+                                     magCorrected.x, magCorrected.y, magCorrected.z, dt);
+        } else {
+            sensor.filter.update6DoF(gx, gy, gz, ax, ay, az, dt);
+        }
+
+        sensor.quat = sensor.filter.getQuaternion();
+        sensorsHzCounter[mac] = (sensorsHzCounter[mac] || 0) + 1; // Contador de frames
+
+        detectZeroVelocity(sensor, ax, ay, az, gx, gy, gz);
+
+        // Eliminación del vector de gravedad para aislar la Aceleración Lineal (movimiento puro)
+        const q = sensor.quat;
+        const G = 9.81; 
+        const gravX = 2.0 * (q.x * q.z - q.w * q.y) * G;
+        const gravY = 2.0 * (q.w * q.x + q.y * q.z) * G;
+        const gravZ = (q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z) * G;
+
+        let aLinX = ax - gravX;
+        let aLinY = ay - gravY;
+        let aLinZ = az - gravZ;
+
+        // Calcula desplazamiento y velocidad final
+        processPosition(sensor, aLinX, aLinY, aLinZ, dt);
+
+        // Actualiza el DOM (UI)
+        updateSensorCard(mac, sensor.quat);
+        updatePositionDisplay(mac, sensor.position);
+        updateSensorStatus(mac);
+        updateLockDisplay(mac);
+        updateTemperatureDisplay(mac);
+        updateMagStatus(mac);
+    }
+}
+
+// ============================================================
+// 5. FUNCIONES DE INTERFAZ DE USUARIO (UI)
+// ============================================================
+// Construcción dinámica de la tarjeta HTML para un nuevo sensor (uso de literales de plantilla)
+function createSensorCard(mac) {
+    const cleanMac = mac.replace(/:/g, ''); // Limpiar MAC para IDs válidos en HTML
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = `card-${cleanMac}`;
+    
+    const optionsHtml = bodyPartsList.map(part => 
+        `<option value="${part}">${part}</option>`
+    ).join('');
+    
+    const axisOptions = `
+        <option value="x">X</option><option value="-x">-X</option>
+        <option value="y">Y</option><option value="-y">-Y</option>
+        <option value="z">Z</option><option value="-z">-Z</option>
+    `;
+
+    // Inyección de HTML crudo. Crea selects, botones, monitores y div para el canvas 3D
+    card.innerHTML = `
+        <h3>
+            <span class="status-led off" id="led-${cleanMac}"></span>
+            Sensor <span class="mac">${mac}</span>
+            <span class="badge" id="part-${cleanMac}">Sin Asignar</span>
+        </h3>
+
+        <div class="controls">
+            <div style="grid-column: span 2;">
+                <label class="field-label">Parte del cuerpo</label>
+                <select onchange="assignBodyPart('${mac}', this.value)">
+                    ${optionsHtml}
+                </select>
+            </div>
+        </div>
+
+        <div class="subsection">
+            <span class="subsection-title">🔄 Mapeo de ejes</span>
+            <div class="axis-grid">
+                <div>
+                    <label class="field-label">X</label>
+                    <select onchange="updateAxis('${mac}', 'x', this.value)">
+                        ${axisOptions.replace('value="x"', 'value="x" selected')}
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">Y</label>
+                    <select onchange="updateAxis('${mac}', 'y', this.value)">
+                        ${axisOptions.replace('value="y"', 'value="y" selected')}
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">Z</label>
+                    <select onchange="updateAxis('${mac}', 'z', this.value)">
+                        ${axisOptions.replace('value="z"', 'value="z" selected')}
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="subsection">
+            <span class="subsection-title">🔒 Bloqueos de ejes</span>
+
+            <div class="lock-row">
+                <span class="lock-row-label">Posición</span>
+                <div class="lock-group">
+                    <button type="button" class="lock-toggle unlocked" onclick="toggleLock('${mac}', 'posX')" id="lock-posX-${cleanMac}">X</button>
+                    <button type="button" class="lock-toggle unlocked" onclick="toggleLock('${mac}', 'posY')" id="lock-posY-${cleanMac}">Y</button>
+                    <button type="button" class="lock-toggle unlocked" onclick="toggleLock('${mac}', 'posZ')" id="lock-posZ-${cleanMac}">Z</button>
+                    <button type="button" class="lock-toggle unlocked" onclick="toggleLock('${mac}', 'posAll')" id="lock-posAll-${cleanMac}">🔒 TODO</button>
+                </div>
+            </div>
+
+            <div class="lock-row">
+                <span class="lock-row-label">Rotación</span>
+                <div class="lock-group">
+                    <button type="button" class="lock-toggle unlocked" onclick="toggleLock('${mac}', 'rotX')" id="lock-rotX-${cleanMac}">X</button>
+                    <button type="button" class="lock-toggle unlocked" onclick="toggleLock('${mac}', 'rotY')" id="lock-rotY-${cleanMac}">Y</button>
+                    <button type="button" class="lock-toggle unlocked" onclick="toggleLock('${mac}', 'rotZ')" id="lock-rotZ-${cleanMac}">Z</button>
+                    <button type="button" class="lock-toggle unlocked" onclick="toggleLock('${mac}', 'rotAll')" id="lock-rotAll-${cleanMac}">🔒 TODO</button>
+                </div>
+            </div>
+
+            <div class="lock-status-line">
+                <span id="lock-status-${cleanMac}">✅ Todos los ejes libres</span>
+            </div>
+        </div>
+
+        <div class="status-row">
+            <span class="status-chip">📊 <strong id="hz-${cleanMac}">0</strong> Hz</span>
+            <span class="status-chip" id="cal-status-${cleanMac}" style="color: var(--warning);">⏳ Calibrando giroscopio...</span>
+            <span class="status-chip" id="temp-${cleanMac}" style="color: var(--muted); display: none;">🌡️ --°C</span>
+            <span class="status-chip" id="mag-status-${cleanMac}" style="color: var(--warning); display: none;">🧲 Interferencia magnética</span>
+        </div>
+
+        <div class="quaternion-display">
+            <div><span class="axis-label">W</span><span id="qw-${cleanMac}">1.000</span></div>
+            <div><span class="axis-label">X</span><span id="qx-${cleanMac}">0.000</span></div>
+            <div><span class="axis-label">Y</span><span id="qy-${cleanMac}">0.000</span></div>
+            <div><span class="axis-label">Z</span><span id="qz-${cleanMac}">0.000</span></div>
+        </div>
+
+        <div class="position-display" id="pos-${cleanMac}">
+            📍 Pos: (0.00, 0.00, 0.00)
+        </div>
+
+        <div class="canvas-container" id="canvas-${cleanMac}"></div>
+
+        <div class="controls">
+            <button onclick="tareSensor('${mac}')" class="btn-info">🎯 Tara (Reset)</button>
+            <button onclick="startGyroCalibration('${mac}')" class="btn-secondary">⚙️ Calibrar giro</button>
+            <button onclick="toggleCalibration('${mac}')" class="btn-warning" id="calBtn-${cleanMac}">🧲 Calibrar mag</button>
+            <button onclick="toggle9DoF('${mac}')" class="btn-secondary" id="dofBtn-${cleanMac}">6DoF</button>
+        </div>
+    `;
+    
+    sensorsContainer.appendChild(card);
+}
+
+// Manipulación de booleanos para la lógica de "Bloqueos" (Locks)
+function toggleLock(mac, lockType) {
+    const sensor = sensorsData[mac];
+    if (!sensor) return;
+    
+    if (!sensor.locks) {
+        sensor.locks = {
+            posX: false, posY: false, posZ: false, posAll: false,
+            rotX: false, rotY: false, rotZ: false, rotAll: false
+        };
+    }
+    
+    // Rutina especial para el botón "Bloquear TODO (Posición)"
+    if (lockType === 'posAll') {
+        const newState = !sensor.locks.posAll;
+        sensor.locks.posAll = newState;
+        sensor.locks.posX = newState;
+        sensor.locks.posY = newState;
+        sensor.locks.posZ = newState;
+        
+        const cleanMac = mac.replace(/:/g, '');
+        ['posX', 'posY', 'posZ', 'posAll'].forEach(key => {
+            const el = document.getElementById(`lock-${key}-${cleanMac}`);
+            if (el) {
+                el.className = `lock-toggle ${newState ? 'locked' : 'unlocked'}`;
+                el.textContent = key === 'posAll' ? (newState ? '🔒 TODO' : '🔒 TODO') : key.replace('pos', '');
+            }
+        });
+        
+        updateLockDisplay(mac);
+        return;
+    }
+    
+    // Rutina especial para el botón "Bloquear TODO (Rotación)"
+    if (lockType === 'rotAll') {
+        const newState = !sensor.locks.rotAll;
+        sensor.locks.rotAll = newState;
+        sensor.locks.rotX = newState;
+        sensor.locks.rotY = newState;
+        sensor.locks.rotZ = newState;
+        
+        const cleanMac = mac.replace(/:/g, '');
+        ['rotX', 'rotY', 'rotZ', 'rotAll'].forEach(key => {
+            const el = document.getElementById(`lock-${key}-${cleanMac}`);
+            if (el) {
+                el.className = `lock-toggle ${newState ? 'locked' : 'unlocked'}`;
+                el.textContent = key === 'rotAll' ? (newState ? '🔒 TODO' : '🔒 TODO') : key.replace('rot', '');
+            }
+        });
+        
+        updateLockDisplay(mac);
+        return;
+    }
+    
+    // Alternar ejes individuales
+    sensor.locks[lockType] = !sensor.locks[lockType];
+    
+    const cleanMac = mac.replace(/:/g, '');
+    const el = document.getElementById(`lock-${lockType}-${cleanMac}`);
+    if (el) {
+        el.className = `lock-toggle ${sensor.locks[lockType] ? 'locked' : 'unlocked'}`;
+        const label = lockType.replace('pos', '').replace('rot', '');
+        el.textContent = label;
+    }
+    
+    updateLockDisplay(mac);
+}
+
+// Actualiza el texto descriptivo del estado de los bloqueos en el UI
+function updateLockDisplay(mac) {
+    const sensor = sensorsData[mac];
+    if (!sensor) return;
+    
+    const cleanMac = mac.replace(/:/g, '');
+    const statusEl = document.getElementById(`lock-status-${cleanMac}`);
+    if (!statusEl) return;
+    
+    const locks = sensor.locks || {};
+    const posLocks = [];
+    const rotLocks = [];
+    
+    if (locks.posAll || (locks.posX && locks.posY && locks.posZ)) {
+        posLocks.push('TODO');
+    } else {
+        if (locks.posX) posLocks.push('X');
+        if (locks.posY) posLocks.push('Y');
+        if (locks.posZ) posLocks.push('Z');
+    }
+    
+    if (locks.rotAll || (locks.rotX && locks.rotY && locks.rotZ)) {
+        rotLocks.push('TODO');
+    } else {
+        if (locks.rotX) rotLocks.push('X');
+        if (locks.rotY) rotLocks.push('Y');
+        if (locks.rotZ) rotLocks.push('Z');
+    }
+    
+    let statusText = '';
+    if (posLocks.length === 0 && rotLocks.length === 0) {
+        statusText = '✅ Todos los ejes libres';
+    } else {
+        if (posLocks.length > 0) {
+            statusText += `📍 Pos: ${posLocks.join(', ')} bloqueado`;
+        }
+        if (rotLocks.length > 0) {
+            if (statusText) statusText += ' | ';
+            statusText += `🔄 Rot: ${rotLocks.join(', ')} bloqueado`;
+        }
+        if (posLocks.length === 0 && rotLocks.length > 0) {
+            statusText = `🔄 Rot: ${rotLocks.join(', ')} bloqueado`;
+        }
+        if (rotLocks.length === 0 && posLocks.length > 0) {
+            statusText = `📍 Pos: ${posLocks.join(', ')} bloqueado`;
+        }
+    }
+    
+    statusEl.textContent = statusText;
+    statusEl.style.color = (posLocks.length > 0 || rotLocks.length > 0) ? 'var(--warning)' : 'var(--success)';
+}
+
+// Funciones minúsculas de actualización del DOM (DOM Updates)
+function updateSensorCard(mac, quat) {
+    const cleanMac = mac.replace(/:/g, '');
+    const elW = document.getElementById(`qw-${cleanMac}`);
+    const elX = document.getElementById(`qx-${cleanMac}`);
+    const elY = document.getElementById(`qy-${cleanMac}`);
+    const elZ = document.getElementById(`qz-${cleanMac}`);
+
+    if (elW) elW.textContent = quat.w.toFixed(3);
+    if (elX) elX.textContent = quat.x.toFixed(3);
+    if (elY) elY.textContent = quat.y.toFixed(3);
+    if (elZ) elZ.textContent = quat.z.toFixed(3);
+}
+
+function updatePositionDisplay(mac, pos) {
+    const cleanMac = mac.replace(/:/g, '');
+    const el = document.getElementById(`pos-${cleanMac}`);
+    if (el) {
+        const sensor = sensorsData[mac];
+        let displayX = pos.x;
+        let displayY = pos.y;
+        let displayZ = pos.z;
+        
+        // El UI también respeta la visualización si hay un bloqueo forzado
+        if (sensor && sensor.locks) {
+            if (sensor.locks.posX) displayX = 0;
+            if (sensor.locks.posY) displayY = 0;
+            if (sensor.locks.posZ) displayZ = 0;
+            if (sensor.locks.posAll) {
+                displayX = 0; displayY = 0; displayZ = 0;
+            }
+        }
+        
+        el.textContent = `📍 Pos: (${displayX.toFixed(2)}, ${displayY.toFixed(2)}, ${displayZ.toFixed(2)})`;
+    }
+}
+
+// Hace tintinear el LED virtual de la UI si la última actualización fue reciente (< 500ms)
+function updateSensorStatus(mac) {
+    const cleanMac = mac.replace(/:/g, '');
+    const led = document.getElementById(`led-${cleanMac}`);
+    if (led) {
+        const sensor = sensorsData[mac];
+        if (sensor && Date.now() - sensor.lastUpdateMs < 500) {
+            led.className = 'status-led on';
+        } else {
+            led.className = 'status-led off';
+        }
+    }
+}
+
+// Muestra advertencias de color si la temperatura se aleja del punto de calibración.
+function updateTemperatureDisplay(mac) {
+    const sensor = sensorsData[mac];
+    if (!sensor || sensor.temperature === null) return;
+    const cleanMac = mac.replace(/:/g, '');
+    const el = document.getElementById(`temp-${cleanMac}`);
+    if (!el) return;
+
+    const delta = sensor.refTemperature !== null ? (sensor.temperature - sensor.refTemperature) : 0;
+    const deltaAbs = Math.abs(delta);
+
+    let color = 'var(--muted)';
+    let hint = '';
+    // Deriva termal significativa
+    if (deltaAbs > 8) {
+        color = 'var(--danger)';
+        hint = ' · recalibrar sugerido';
+    } else if (deltaAbs > 4) {
+        color = 'var(--warning)';
+    }
+
+    el.style.display = 'inline-flex';
+    el.style.color = color;
+    const sign = delta >= 0 ? '+' : '';
+    el.textContent = `🌡️ ${sensor.temperature.toFixed(1)}°C (Δ${sign}${delta.toFixed(1)}°C${hint})`;
+}
+
+function updateMagStatus(mac) {
+    const sensor = sensorsData[mac];
+    const cleanMac = mac.replace(/:/g, '');
+    const el = document.getElementById(`mag-status-${cleanMac}`);
+    if (!el || !sensor) return;
+    el.style.display = (sensor.use9DoF && sensor.magDisturbed) ? 'inline-flex' : 'none';
+}
+
+function assignBodyPart(mac, partName) {
+    if (sensorsData[mac]) {
+        sensorsData[mac].assignedPart = partName;
+        const cleanMac = mac.replace(/:/g, '');
+        const el = document.getElementById(`part-${cleanMac}`);
+        if (el) el.textContent = partName;
+    }
+}
+
+function updateAxis(mac, targetAxis, sourceAxis) {
+    if (sensorsData[mac]) {
+        sensorsData[mac].axisMap[targetAxis] = sourceAxis;
+    }
+}
+
+// Alterna entre algoritmo de fusión de 6 ejes y 9 ejes.
+function toggle9DoF(mac) {
+    const sensor = sensorsData[mac];
+    if (!sensor) return;
+    const isChecked = !sensor.use9DoF;
+    sensor.use9DoF = isChecked;
+    const cleanMac = mac.replace(/:/g, '');
+    const btn = document.getElementById(`dofBtn-${cleanMac}`);
+    if (btn) btn.textContent = isChecked ? '9DoF' : '6DoF';
+    console.log(`${mac} → ${isChecked ? '9DoF' : '6DoF'}`);
+}
+
+function startGyroCalibration(mac) {
+    const sensor = sensorsData[mac];
+    if (!sensor) return;
+    
+    sensor.isCalibratingGyro = true;
+    sensor.gyroBias = { x: 0, y: 0, z: 0 };
+    sensor.gyroSamples = 0;
+    
+    const cleanMac = mac.replace(/:/g, '');
+    const statusEl = document.getElementById(`cal-status-${cleanMac}`);
+    if (statusEl) {
+        statusEl.innerHTML = '⏳ Calibrando giroscopio...';
+        statusEl.style.color = 'var(--warning)';
+    }
+    
+    rawConsole.innerHTML += `<div style="color: var(--warning);">⏳ Calibrando giroscopio para ${mac} (mantén quieto)</div>`;
+    rawConsole.scrollTop = rawConsole.scrollHeight;
+    
+    // Temporizador de seguridad
+    setTimeout(() => {
+        if (sensor.isCalibratingGyro) {
+            sensor.isCalibratingGyro = false;
+            if (sensor.gyroSamples > 0) {
+                sensor.gyroBias.x /= sensor.gyroSamples;
+                sensor.gyroBias.y /= sensor.gyroSamples;
+                sensor.gyroBias.z /= sensor.gyroSamples;
+            }
+            sensor.refTemperature = sensor.temperature;
+            if (statusEl) {
+                statusEl.innerHTML = '✅ Giroscopio calibrado';
+                statusEl.style.color = 'var(--success)';
+            }
+            rawConsole.innerHTML += `<div style="color: var(--success);">✅ Calibración automática completada para ${mac}</div>`;
+            rawConsole.scrollTop = rawConsole.scrollHeight;
+        }
+    }, 3000);
+}
+
+function toggleCalibration(mac) {
+    const sensor = sensorsData[mac];
+    if (!sensor) return;
+    
+    const cal = sensor.magCal;
+    const cleanMac = mac.replace(/:/g, '');
+    const btn = document.getElementById(`calBtn-${cleanMac}`);
+
+    // Inicia o finaliza el modo de registro max/min para el magnetómetro
+    if (!cal.calibrating) {
+        cal.calibrating = true;
+        cal.min = { x: 10000, y: 10000, z: 10000 };
+        cal.max = { x: -10000, y: -10000, z: -10000 };
+        btn.textContent = '⏳ Calibrando...';
+        btn.style.background = 'var(--danger)';
+        rawConsole.innerHTML += `<div style="color: var(--warning);">🧲 Calibrando magnetómetro ${mac} (gira el sensor en 8)</div>`;
+        rawConsole.scrollTop = rawConsole.scrollHeight;
+    } else {
+        cal.calibrating = false;
+        cal.offset.x = (cal.max.x + cal.min.x) / 2;
+        cal.offset.y = (cal.max.y + cal.min.y) / 2;
+        cal.offset.z = (cal.max.z + cal.min.z) / 2;
+        cal.scale.x = (cal.max.x - cal.min.x) / 2 || 1e-6; // Previene divisiones por cero
+        cal.scale.y = (cal.max.y - cal.min.y) / 2 || 1e-6;
+        cal.scale.z = (cal.max.z - cal.min.z) / 2 || 1e-6;
+        cal.expectedMag = 1;
+
+        btn.textContent = '✅ Mag Calibrado';
+        btn.style.background = 'var(--success)';
+        
+        rawConsole.innerHTML += `<div style="color: var(--success);">✅ Magnetómetro calibrado para ${mac}</div>`;
+        rawConsole.scrollTop = rawConsole.scrollHeight;
+        
+        setTimeout(() => {
+            btn.textContent = '🧲 Calibrar Mag';
+            btn.style.background = 'var(--warning)';
+        }, 3000);
+    }
+}
+
+// Tara el sensor: toma la orientación actual y la define como el "Frente/Cero absoluto"
+function tareSensor(mac) {
+    const sensor = sensorsData[mac];
+    if (sensor && sensor.quat) {
+        // Guarda un cuaternión inverso (conjugado) para corregir el visualizador posteriormente
+        sensor.offsetQuat = new THREE.Quaternion(
+            -sensor.quat.x, 
+            -sensor.quat.y, 
+            -sensor.quat.z, 
+            sensor.quat.w
+        );
+        
+        // Pone las integradoras de posición en cero absoluto
+        sensor.position.x = 0;
+        sensor.position.y = 0;
+        sensor.position.z = 0;
+        sensor.velocity.x = 0;
+        sensor.velocity.y = 0;
+        sensor.velocity.z = 0;
+        if (sensor.filteredAccel) {
+            sensor.filteredAccel.x = 0;
+            sensor.filteredAccel.y = 0;
+            sensor.filteredAccel.z = 0;
+        }
+        sensor.zuptCounter = 0;
+        
+        const cleanMac = mac.replace(/:/g, '');
+        const posEl = document.getElementById(`pos-${cleanMac}`);
+        if (posEl) posEl.textContent = '📍 Pos: (0.00, 0.00, 0.00)';
+        
+        rawConsole.innerHTML += `<div style="color: var(--info);">🎯 Sensor ${mac} reseteado (Tara)</div>`;
+        rawConsole.scrollTop = rawConsole.scrollHeight;
+    }
+}
+
+// Corre cada segundo para contabilizar cuántos paquetes llegaron (Hertz)
+function calculateHz() {
+    for (let mac in sensorsHzCounter) {
+        const hz = sensorsHzCounter[mac];
+        const cleanMac = mac.replace(/:/g, '');
+        const cardHz = document.getElementById(`hz-${cleanMac}`);
+        if (cardHz) cardHz.textContent = hz;
+        sensorsHzCounter[mac] = 0;
+    }
+}
+
+// ============================================================
+// 6. MOTOR GRÁFICO 3D (THREE.JS)
+// ============================================================
+
+// Instancia un lienzo WebGL dentro de la tarjeta del sensor para mostrar un modelo 3D.
+function add3DModelForSensor(mac) {
+    const cleanMac = mac.replace(/:/g, '');
+    const container = document.getElementById(`canvas-${cleanMac}`);
+
+    // Crear la escena e inicializar colores
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x181c22);
+
+    const width = container.clientWidth || 380;
+    const height = container.clientHeight || 200;
+
+    const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 100);
+    camera.position.set(0, 2.5, 3);
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(width, height);
+    container.appendChild(renderer.domElement);
+
+    // Sistema de luces
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(5, 5, 5);
+    scene.add(light);
+    scene.add(new THREE.AmbientLight(0x606060));
+
+    // Ensamblaje del modelo rudimentario con formas básicas para representar el sensor
+    const group = new THREE.Group();
+
+    // Placa verde (PCB)
+    const pcb = new THREE.Mesh(
+        new THREE.BoxGeometry(2.2, 0.1, 1.8), 
+        new THREE.MeshPhongMaterial({ color: 0x1b4d2e })
+    );
+    group.add(pcb);
+
+    // Representación del chip del sensor (ICM/MPU)
+    const icm = new THREE.Mesh(
+        new THREE.BoxGeometry(0.7, 0.15, 1.2), 
+        new THREE.MeshPhongMaterial({ color: 0x6a0dad })
+    );
+    icm.position.set(-0.6, 0.1, -0.1);
+    group.add(icm);
+
+    // Representación del microcontrolador (ESP32/ESP8266)
+    const esp = new THREE.Mesh(
+        new THREE.BoxGeometry(0.8, 0.2, 1.2), 
+        new THREE.MeshPhongMaterial({ color: 0x222222 })
+    );
+    esp.position.set(0.4, 0.1, -0.1);
+    group.add(esp);
+
+    // Led 3D que indica estado de comunicación
+    const ledMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0x00ff00, 
+        emissive: 0x001100 
+    });
+    const led = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 16), ledMaterial);
+    led.position.set(0.7, 0.1, 0.6);
+    group.add(led);
+
+    // Flechas guía X(Rojo), Y(Verde), Z(Azul)
+    const axesHelper = new THREE.AxesHelper(3);
+    group.add(axesHelper);
+
+    scene.add(group);
+
+    sensors3D[mac] = { scene, camera, renderer, group, ledMaterial };
+
+    // Observer: Si la ventana cambia de tamaño, ajusta el render para no perder proporción (aspect ratio).
+    const resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+            const w = entry.contentRect.width;
+            const h = entry.contentRect.height;
+            if (w < 1 || h < 1) continue;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+        }
+    });
+    resizeObserver.observe(container);
+    sensors3D[mac].resizeObserver = resizeObserver;
+}
+
+// Bucle de renderizado asíncrono (típico de videojuegos).
+function animate3D() {
+    requestAnimationFrame(animate3D); // Llama al siguiente frame disponible en el navegador
+    const now = Date.now();
+
+    for (let mac in sensors3D) {
+        const sensor = sensorsData[mac];
+        const model = sensors3D[mac];
+
+        if (sensor && model) {
+            // Aplicar rotaciones en la visualización
+            let displayQuat = new THREE.Quaternion(
+                sensor.quat.x, sensor.quat.y, sensor.quat.z, sensor.quat.w
+            );
+            
+            // Si el usuario bloqueó un eje de rotación, el modelo 3D también lo simula.
+            if (sensor.locks) {
+                // Convertir el cuaternión en ángulos de Euler (Grados Pitch/Yaw/Roll) para poder anular ejes
+                const euler = new THREE.Euler();
+                euler.setFromQuaternion(displayQuat);
+                
+                if (sensor.locks.rotX) euler.x = 0;
+                if (sensor.locks.rotY) euler.y = 0;
+                if (sensor.locks.rotZ) euler.z = 0;
+                if (sensor.locks.rotAll) {
+                    euler.x = 0; euler.y = 0; euler.z = 0;
+                }
+                
+                displayQuat.setFromEuler(euler);
+            }
+            
+            // Combina el cuaternión de tara con el cuaternión del sensor real
+            const finalQuat = new THREE.Quaternion()
+                .copy(sensor.offsetQuat)
+                .multiply(displayQuat);
+            
+            model.group.quaternion.copy(finalQuat);
+            
+            // Aplicar restricciones de posición espacial en el visualizador 3D
+            let posX = sensor.position.x || 0;
+            let posY = sensor.position.y || 0;
+            let posZ = sensor.position.z || 0;
+            
+            if (sensor.locks) {
+                if (sensor.locks.posX) posX = 0;
+                if (sensor.locks.posY) posY = 0;
+                if (sensor.locks.posZ) posZ = 0;
+                if (sensor.locks.posAll) {
+                    posX = 0; posY = 0; posZ = 0;
+                }
+            }
+            
+            model.group.position.set(posX, posY, posZ);
+            
+            // Animación del material del LED
+            if (now - sensor.lastUpdateMs < 500) {
+                model.ledMaterial.emissive.setHex(0x00ff00);
+            } else {
+                model.ledMaterial.emissive.setHex(0x001100);
+            }
+        }
+        
+        // Pinta la imagen en el canvas
+        if (model && model.renderer) {
+            model.renderer.render(model.scene, model.camera);
+        }
+    }
+}
+
+// ============================================================
+// 7. WEB SERIAL API Y COMUNICACIONES
+// ============================================================
+/* 
+   Usa la API experimental de navegadores "navigator.serial".
+   Permite comunicación directa desde una web con hardware USB/Bluetooth Serial 
+   sin necesidad de programas intermediarios.
+*/
+connectBtn.addEventListener('click', async () => {
+    try {
+        port = await navigator.serial.requestPort(); // Abre prompt para elegir COM
+        await port.open({ baudRate: 1000000 }); // Configuración de velocidad alta
+        connectBtn.textContent = '✅ Conectado';
+        connectBtn.style.background = 'var(--success)';
+        rawConsole.innerHTML += '<div style="color: var(--success);">✅ Puerto abierto. Escuchando a 1M baudios...</div>';
+        
+        readSerialLoop(); // Inicia la recolección
+        setInterval(calculateHz, 1000); // Lanza el cronómetro de Hz
+    } catch (err) {
+        console.error('Error:', err);
+        alert('Error al conectar: ' + err);
+    }
+});
+
+// Bucle de lectura de datos asíncrono
+async function readSerialLoop() {
+    const decoder = new TextDecoderStream(); // Traduce los bytes puros a string UTF-8
+    const inputDone = port.readable.pipeTo(decoder.writable);
+    const inputStream = decoder.readable;
+    reader = inputStream.getReader();
+
+    let buffer = ""; // Acumulador temporal para fragmentos de paquetes
+
+    while (true) {
+        const { value, done } = await reader.read();
+        if (value) {
+            buffer += value;
+            let lines = buffer.split('\n'); // Divide cuando encuentra salto de línea
+            buffer = lines.pop(); // Guarda el resto truncado en el buffer para la próxima vuelta
+
+            for (let line of lines) {
+                line = line.trim();
+                // Verificación de integridad muy básica: empieza con '{' y termina con '}'
+                if (line.startsWith('{') && line.endsWith('}')) {
+                    processPacket(line);
+                    updateRawConsole(line);
+                }
+            }
+        }
+        if (done) {
+            reader.releaseLock();
+            break;
+        }
+    }
+}
+
+// Imprime los datos en texto para debug en la UI.
+function updateRawConsole(line) {
+    allRawData.push(line);
+    rawConsole.innerHTML += `<div>${line}</div>`;
+    // Limita la memoria gráfica borrando mensajes viejos (máx 50)
+    if (rawConsole.childNodes.length > 50) {
+        rawConsole.removeChild(rawConsole.firstChild);
+    }
+    rawConsole.scrollTop = rawConsole.scrollHeight; // Auto-scroll
+}
+
+// ============================================================
+// 8. EXPORTADOR A EXCEL / CSV
+// ============================================================
+
+document.getElementById('exportCsvBtn').addEventListener('click', () => {
+    if (allRawData.length === 0) {
+        alert('No hay datos para exportar.');
+        return;
+    }
+    
+    // Preparación de los encabezados (headers) para Excel
+    const csvHeader = "MAC,Timestamp,Ax,Ay,Az,Gx,Gy,Gz,Mx,My,Mz,Temp\n";
+    // Limpieza de caracteres '{' y '}'
+    const cleanedData = allRawData.map(line => line.replace(/[{}]/g, ''));
+    const csvContent = csvHeader + cleanedData.join("\n");
+    
+    // Generación dinámica de un archivo virtual en la memoria del navegador
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a'); // Anchor invisible para lanzar la descarga
+    a.href = url;
+    a.download = `MoCap_RawData_${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url); // Liberación de la RAM
+});
+
+// ============================================================
+// 9. INICIALIZACIÓN
+// ============================================================
+
+window.addEventListener('load', () => {
+    animate3D(); // Inicia el render loop incluso antes de conectar el hardware
+    console.log('🚀 MoCap Web Hub con Bloqueos de Ejes cargado');
+    console.log('📌 Mejoras: Beta dinámico, ZUPT, Calibración de sesgo, Bloqueo de ejes');
+});
+</script>
+</body>
+</html>
